@@ -39,7 +39,7 @@ function cardSrc(c) { return c && c.suit ? CARD_FACES[String(c.rank) + (c.suit.l
 function cleanName(n) { return String(n || "").replace(/[ -]/g, "").trim().slice(0, 18); }
 const STORE_ROOM = "ezelen_room_v1", STORE_NAME = "ezelen_name_v1", STORE_AVATAR = "ezelen_avatar_v1", STORE_LANG = "ezelen_lang_v1", STORE_VOL = "ezelen_sfxvol_v1", STORE_ADMIN = "ezelen_admin_v1";
 const ADMIN_CODE = "EZELADMIN"; // unlocks the test-bot + beheer controls on this device
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.2.1";
 function loadStore(k) { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch { return null; } }
 function saveStore(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* */ } }
 
@@ -185,7 +185,9 @@ function Intro({ reduced, onDone }) {
     };
     setTimeout(step, 350);
   }, [reduced, onDone]);
-  useEffect(() => { const tmo = setTimeout(() => run(false), 2200); return () => clearTimeout(tmo); }, [run]); // silent fallback
+  // Wait for a tap so the typewriter plays WITH sound (browsers need a gesture before any audio).
+  // Only auto-run silently as a last-resort dead-end guard after a generous window.
+  useEffect(() => { const tmo = setTimeout(() => run(false), 6500); return () => clearTimeout(tmo); }, [run]);
   function onTap() { if (ran.current) { cancelled.current = true; onDone(); } else run(true); }
   const shown = INTRO_TEXT.slice(0, typed);
   const done = typed >= INTRO_TEXT.length;
@@ -210,9 +212,9 @@ function LanguagePage({ t, current, onPick }) {
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: "26px 22px 60px" }}>
       <div style={{ textAlign: "center", marginBottom: 26 }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}><Medallion size={112} glow /></div>
-        <Wordmark size={34} />
-        <div style={{ marginTop: 16, display: "inline-flex", alignItems: "center", gap: 8, color: C.muted, fontSize: 14 }}><Globe size={16} /> {t.chooseLanguage}</div>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><Medallion size={148} glow /></div>
+        <Wordmark size={38} />
+        <div style={{ marginTop: 12, display: "flex", justifyContent: "center", alignItems: "center", gap: 8, color: C.muted, fontSize: 14 }}><Globe size={16} /> {t.chooseLanguage}</div>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {LANGS.map((l) => (
@@ -770,9 +772,8 @@ async function buildEzelCard({ ezelName, avatar, opdracht, t }) {
   g.strokeStyle = "rgba(242,145,63,0.55)"; g.lineWidth = 6; roundRectPath(g, 40, 40, W - 80, H - 80, 46); g.stroke();
   g.strokeStyle = "rgba(242,145,63,0.22)"; g.lineWidth = 2; roundRectPath(g, 58, 58, W - 116, H - 116, 38); g.stroke();
   const cx = W / 2; g.textAlign = "center";
-  try { const med = await loadImg(medallionUrl); g.drawImage(med, cx - 86, 96, 172, 172); } catch { /* */ }
-  g.fillStyle = "#f2913f"; g.font = "700 46px Fraunces, Georgia, serif"; g.fillText((t.resultEzel || "De ezel").toUpperCase(), cx, 332);
-  const avR = 118, avY = 500; let drew = false;
+  g.fillStyle = "#f2913f"; g.font = "700 50px Fraunces, Georgia, serif"; g.fillText((t.resultEzel || "De ezel").toUpperCase(), cx, 250);
+  const avR = 124, avY = 470; let drew = false;
   const ringAndClip = async (src) => { try { const im = await loadImg(src); g.save(); g.beginPath(); g.arc(cx, avY, avR, 0, Math.PI * 2); g.clip(); const s = Math.max((2 * avR) / im.naturalWidth, (2 * avR) / im.naturalHeight); g.drawImage(im, cx - im.naturalWidth * s / 2, avY - im.naturalHeight * s / 2, im.naturalWidth * s, im.naturalHeight * s); g.restore(); return true; } catch { return false; } };
   if (avatar) drew = await ringAndClip(avatar);
   if (!drew) drew = await ringAndClip(medallionUrl);
