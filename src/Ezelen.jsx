@@ -120,7 +120,7 @@ export default function Ezelen() {
       <div aria-hidden style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 1, backgroundImage: FILM_GRAIN, backgroundSize: "140px 140px", opacity: reduced.current ? 0.04 : 0.06, mixBlendMode: "overlay" }} />
       <div aria-hidden style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 1, background: "radial-gradient(120% 100% at 50% 40%, transparent 55%, rgba(0,0,0,0.55) 100%)" }} />
 
-      <div style={{ position: "relative", zIndex: 2, maxWidth: 480, margin: "0 auto", minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
+      <div style={{ position: "relative", zIndex: 2, maxWidth: 480, margin: "0 auto", minHeight: "100dvh", display: "flex", flexDirection: "column", paddingTop: "env(safe-area-inset-top)" }}>
         {screen === "language" && <LanguagePage t={t} current={lang} onPick={chooseLang} />}
         {screen === "home" && (
           <Home t={t} lang={lang} name={name} setName={setName} avatar={avatar} setAvatar={setAvatar}
@@ -428,13 +428,14 @@ function Game({ t, st, status, code, myPid, amHost, reduced, act, serverNow, sim
   const pendingIds = (E && E.pendingIds) || [];
   const pendingCount = pendingIds.length;
   const passTotal = E ? (E.passTotal || players.length) : players.length;
-  const canPass = phase === "passing" && !mySet;          // pick / re-pick any time until the swap
+  const canPass = phase === "passing" && !mySet && youPending == null; // one shove per round
   const declarerId = E ? E.declarerId : null;
   const iAmDeclarer = declarerId === myPid;
   const reactedIds = (E && E.reactedIds) || [];
   const iReacted = reactedIds.includes(myPid);
 
   const [myMs, setMyMs] = useState(null);
+  const [flyer, setFlyer] = useState(null); // a card mid-throw (flip + slide to the left)
   const lastRace = useRef(0);
   useEffect(() => {
     if (phase === "race" && E.raceStartTs !== lastRace.current) { lastRace.current = E.raceStartTs; setMyMs(null); }
@@ -475,7 +476,15 @@ function Game({ t, st, status, code, myPid, amHost, reduced, act, serverNow, sim
     if (simLatency > 0) setTimeout(fire, simLatency); else fire();
   }, [phase, iAmDeclarer, iReacted, myMs, serverNow, E, act, simLatency]);
   const doDeclare = useCallback(() => { if (phase === "passing" && mySet) { sfx.declare(); act("declare"); } }, [phase, mySet, act]);
-  const doPass = useCallback((cardId) => { if (canPass) { sfx.pass(); act("pass", { cardId }); } }, [canPass, act]);
+  // tap a card -> it flips face-down and slides up-left to the next player, then commits
+  const doPass = useCallback((card, rect) => {
+    if (!canPass) return;
+    sfx.pass();
+    if (rect && !reduced) setFlyer({ card, rect });
+    act("pass", { cardId: card.id });
+  }, [canPass, act, reduced]);
+  useEffect(() => { if (!flyer) return; const tmo = setTimeout(() => setFlyer(null), 720); return () => clearTimeout(tmo); }, [flyer]);
+  useEffect(() => { setFlyer(null); }, [phase, E && E.round]); // never leave a stale flyer across rounds
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
@@ -504,9 +513,11 @@ function Game({ t, st, status, code, myPid, amHost, reduced, act, serverNow, sim
         <div style={{ textAlign: "center", fontSize: 11, color: C.faint, marginBottom: 8 }}>
           {phase === "passing" ? (mySet ? t.handHasSet : youPending != null ? t.handChosen(pendingCount, passTotal) : t.handChoose) : t.yourCards}
         </div>
-        <Fan hand={myHand} collectRank={bestRank} disabled={!canPass} freshId={freshId.current} locked={!!mySet} pendingId={youPending} onTap={doPass} reduced={reduced} />
+        <Fan hand={myHand} collectRank={bestRank} disabled={!canPass} freshId={freshId.current} locked={!!mySet}
+          hiddenIds={[youPending, flyer && flyer.card.id].filter((v) => v != null)} onTap={doPass} reduced={reduced} />
       </div>
 
+      {flyer && <PassFlyer flyer={flyer} />}
       {phase === "result" && E.result && <ResultOverlay t={t} E={E} myPid={myPid} amHost={amHost} act={act} />}
       {phase === "gameover" && <GameOverOverlay t={t} E={E} myPid={myPid} amHost={amHost} act={act} />}
     </div>
@@ -621,26 +632,27 @@ function StatusLine({ t, phase, E, bestRank, bestCount, iAmDeclarer, iReacted, m
 
 // In lockstep the hand is always at most 4 cards, so they sit side by side with a
 // small gap (no overlap) at the real card aspect ratio (320x465) — every card,
-// incl. its index corners, is fully visible. The card you chose to shove lifts up.
-function Fan({ hand, collectRank, disabled, freshId, locked, pendingId, onTap, reduced }) {
-  const n = hand.length;
+// incl. its index corners, is fully visible. A card you've shoved this round is
+// hidden (it flew off via the PassFlyer overlay).
+function Fan({ hand, collectRank, disabled, freshId, locked, hiddenIds = [], onTap, reduced }) {
+  const cards = hand.filter((c) => !hiddenIds.includes(c.id));
+  const n = cards.length;
   const W = n >= 6 ? 52 : 64; // shrink a touch only if somehow more than 5 cards
   return (
     <div style={{ display: "flex", justifyContent: "center", alignItems: "flex-end", gap: 6, minHeight: 110 }}>
-      {hand.map((c, i) => {
+      {cards.map((c, i) => {
         const mid = (n - 1) / 2;
         const rot = (i - mid) * 2.5;
         const glow = collectRank && c.rank === collectRank;
-        const chosen = pendingId != null && c.id === pendingId;
-        const lift = chosen ? 18 : glow ? 7 : 0;
+        const lift = glow ? 7 : 0;
         const src = cardSrc(c);
-        const ringShadow = chosen ? `0 0 0 2.5px ${C.mandLite}, 0 12px 22px ${C.glowWarm}` : glow ? `0 0 0 2px ${C.mand}, 0 8px 18px ${C.glowWarm}` : "0 4px 12px rgba(0,0,0,0.5)";
+        const ringShadow = glow ? `0 0 0 2px ${C.mand}, 0 8px 18px ${C.glowWarm}` : "0 4px 12px rgba(0,0,0,0.5)";
         return (
-          <button key={c.id} onClick={() => onTap(c.id)} disabled={disabled} className={freshId === c.id && !reduced ? "ez-newcard" : ""} aria-label={`${c.rank} ${c.suit.sym}`}
+          <button key={c.id} onClick={(e) => onTap(c, e.currentTarget.getBoundingClientRect())} disabled={disabled} className={freshId === c.id && !reduced ? "ez-newcard" : ""} aria-label={`${c.rank} ${c.suit.sym}`}
             style={{ width: W, aspectRatio: "320 / 465", padding: 0, border: "none", borderRadius: 7, background: "transparent",
               transform: `rotate(${rot}deg) translateY(${-lift}px)`, transformOrigin: "bottom center",
-              cursor: disabled ? "default" : "pointer", opacity: disabled && !locked && !chosen ? 0.9 : 1, position: "relative", transition: "transform 160ms" }}>
-            {src ? <img src={src} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 7, display: "block", boxShadow: ringShadow }} /> : <FallbackCard c={c} glow={glow || chosen} />}
+              cursor: disabled ? "default" : "pointer", opacity: disabled && !locked ? 0.9 : 1, position: "relative", transition: "transform 160ms" }}>
+            {src ? <img src={src} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 7, display: "block", boxShadow: ringShadow }} /> : <FallbackCard c={c} glow={glow} />}
           </button>
         );
       })}
@@ -653,6 +665,31 @@ function FallbackCard({ c, glow }) {
       <span style={{ fontSize: 16, fontWeight: 800, lineHeight: 1 }}>{c.rank}</span>
       <span style={{ alignSelf: "center", fontSize: 22 }}>{c.suit.sym}</span>
       <span style={{ fontSize: 16, fontWeight: 800, alignSelf: "flex-end", transform: "rotate(180deg)", lineHeight: 1 }}>{c.rank}</span>
+    </div>
+  );
+}
+
+// The card back you see when a card is shoved face-down: green felt + the ezel medallion.
+function CardBack() {
+  return (
+    <div style={{ width: "100%", height: "100%", borderRadius: 7, overflow: "hidden", border: `3px solid ${C.cream}`, background: `radial-gradient(circle at 50% 42%, ${C.feltHi}, ${C.feltLo})`, boxShadow: `0 0 0 1px ${C.rail2}, 0 10px 22px rgba(0,0,0,0.55)`, display: "grid", placeItems: "center" }}>
+      <img src={medallionUrl} alt="" draggable={false} style={{ width: "72%", height: "72%", objectFit: "contain", opacity: 0.96 }} />
+    </div>
+  );
+}
+// A shoved card: starts over the tapped card, flips to its back and slides up-left to the next player.
+function PassFlyer({ flyer }) {
+  const r = flyer.rect;
+  return (
+    <div aria-hidden style={{ position: "fixed", left: r.left, top: r.top, width: r.width, height: r.height, zIndex: 70, pointerEvents: "none", perspective: 800, animation: "ezFlyMove 700ms cubic-bezier(.45,.05,.3,1) forwards" }}>
+      <div style={{ position: "relative", width: "100%", height: "100%", transformStyle: "preserve-3d", animation: "ezFlip 640ms ease forwards" }}>
+        <div style={{ position: "absolute", inset: 0, backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}>
+          <img src={cardSrc(flyer.card)} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 7, boxShadow: "0 8px 20px rgba(0,0,0,0.55)" }} />
+        </div>
+        <div style={{ position: "absolute", inset: 0, backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden", transform: "rotateY(180deg)" }}>
+          <CardBack />
+        </div>
+      </div>
     </div>
   );
 }
@@ -930,7 +967,7 @@ function GlobalStyle() {
     <style>{`
       @keyframes ezThink { 0%,100% { opacity:.4; transform: scale(1) } 50% { opacity:1; transform: scale(1.3) } }
       @keyframes ezStamp { from { transform: scale(1.9) rotate(-12deg); opacity:0 } to { transform:none; opacity:1 } }
-      @keyframes ezNewcard { from { transform: translateY(16px) scale(.85); opacity:0 } to { opacity:1 } }
+      @keyframes ezNewcard { 0% { transform: translateX(120px) translateY(-6px) rotate(7deg); opacity:0 } 60% { opacity:1 } 100% { transform: none; opacity:1 } }
       @keyframes ezAlarmRing { 0% { box-shadow:0 0 0 0 rgba(255,61,104,.6) } 100% { box-shadow:0 0 0 16px rgba(255,61,104,0) } }
       @keyframes ezSlamPulse { 0% { box-shadow:0 0 0 2px ${C.alarm},0 0 0 0 rgba(255,61,104,.5) } 100% { box-shadow:0 0 0 2px ${C.alarm},0 0 0 30px rgba(255,61,104,0) } }
       @keyframes ezDeclareBeat { 0%,100% { transform: scale(1) } 50% { transform: scale(1.05) } }
@@ -943,8 +980,10 @@ function GlobalStyle() {
       @keyframes ezTap { 0%,100% { opacity:.45 } 50% { opacity:.9 } }
       @keyframes ezCaret { 0%,49% { opacity:1 } 50%,100% { opacity:0 } }
       .ez-caret-blink { animation: ezCaret 1s steps(1,end) infinite; }
+      @keyframes ezFlyMove { 0% { transform: translate(0,0) scale(1); opacity:1 } 38% { transform: translate(-4px,-26px) scale(1.03); opacity:1 } 72% { opacity:1 } 100% { transform: translate(-118px,-212px) scale(.5); opacity:0 } }
+      @keyframes ezFlip { 0% { transform: rotateY(0deg) } 38%,100% { transform: rotateY(180deg) } }
       .ez-stamp { animation: ezStamp 260ms ease both; }
-      .ez-newcard { animation: ezNewcard 260ms ease both; }
+      .ez-newcard { animation: ezNewcard 460ms cubic-bezier(.35,.7,.25,1) both; }
       .ez-alarmring { animation: ezAlarmRing 1.1s ease-out infinite; }
       .ez-slam-live { animation: ezSlamPulse 1.05s ease-out infinite; }
       .ez-declare { animation: ezDeclareBeat 900ms ease-in-out infinite; }
