@@ -3,6 +3,7 @@ import { Hand, Users, Plus, Play, RotateCcw, ChevronRight, ChevronLeft, Settings
 import { createNet, clientId } from "./net.js";
 import { L, LANGS } from "./i18n.js";
 import { sfx, unlock as sfxUnlock, setMuted as sfxSetMuted } from "./sfx.js";
+import medallionUrl from "./assets/logo.webp";
 
 /* ------------------------------------------------------------------ */
 /*  EZELEN — het reactiekaartspel, online op het Kingsen-platform.      */
@@ -197,8 +198,9 @@ function LanguagePage({ t, current, onPick }) {
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: "26px 22px 60px" }}>
       <div style={{ textAlign: "center", marginBottom: 26 }}>
-        <Wordmark size={40} />
-        <div style={{ marginTop: 18, display: "inline-flex", alignItems: "center", gap: 8, color: C.muted, fontSize: 14 }}><Globe size={16} /> {t.chooseLanguage}</div>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}><Medallion size={112} glow /></div>
+        <Wordmark size={34} />
+        <div style={{ marginTop: 16, display: "inline-flex", alignItems: "center", gap: 8, color: C.muted, fontSize: 14 }}><Globe size={16} /> {t.chooseLanguage}</div>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {LANGS.map((l) => (
@@ -224,7 +226,10 @@ function Home({ t, lang, name, setName, avatar, setAvatar, joinCode, setJoinCode
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "20px 20px 40px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <Wordmark size={40} />
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Medallion size={44} />
+          <Wordmark size={34} />
+        </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button aria-label="mute" onClick={onMute} style={iconBtn()}>{muted ? <VolumeX size={15} /> : <Volume2 size={15} />}</button>
           <button aria-label="taal" onClick={onLang} style={iconBtn()}><Globe size={15} /></button>
@@ -307,9 +312,10 @@ function TopBar({ t, st, status, code, amHost, muted, onMute, onLeave, onAdmin, 
   const round = st && st.ezelen ? st.ezelen.round : 0;
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px 6px" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+        <Medallion size={24} />
         <Wordmark size={22} />
-        {round > 0 && <span style={{ fontSize: 11, color: C.faint }}>{t.round(round)}</span>}
+        {round > 0 && <span style={{ fontSize: 11, color: C.faint, alignSelf: "flex-end", marginBottom: 2 }}>{t.round(round)}</span>}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
         <span title={status} style={{ width: 8, height: 8, borderRadius: "50%", background: dot, boxShadow: `0 0 8px ${dot}` }} />
@@ -890,6 +896,7 @@ function AvatarCropper({ t, src, onCancel, onConfirm }) {
 
 /* ============================ small UI bits ============================ */
 function Wordmark({ size = 28 }) { return <span style={{ fontFamily: FR, fontWeight: 900, fontSize: size, letterSpacing: "0.03em", color: C.mand, lineHeight: 1 }}>EZELEN</span>; }
+function Medallion({ size = 40, glow }) { return <img src={medallionUrl} alt="Ezelen" draggable={false} style={{ width: size, height: size, objectFit: "contain", display: "block", filter: glow ? `drop-shadow(0 6px 18px ${C.glowWarm})` : "none" }} />; }
 function Centered({ children }) { return <div style={{ flex: 1, minHeight: "70dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>{children}</div>; }
 function Overlay({ children, onClose, align }) {
   return (

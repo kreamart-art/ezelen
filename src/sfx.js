@@ -12,7 +12,6 @@ import reactLateUrl from "./assets/react-late.mp3";
 import gameOverUrl from "./assets/game-over.mp3";
 import cheersUrl from "./assets/cheers.mp3";
 import mythicKingUrl from "./assets/mythic-king.mp3";
-import mgIntroUrl from "./assets/mg-intro.mp3";
 import twBellUrl from "./assets/tw-bell.mp3";
 import twKeyUrl from "./assets/tw-key.mp3";
 
@@ -91,7 +90,7 @@ export const sfx = {
   pass() { play(cardDrawUrl, 0.8); vibrate(10); },          // you slide a card to the left
   receive() { play(cardOpenUrl, 0.55); },                   // a card arrives in your hand
   declare() { play(mythicKingUrl, 0.9); vibrate([20, 40, 20]); }, // you have four -> slam to declare
-  race() { play(mgIntroUrl, 0.7); vibrate(25); },           // the table flips to the alarm: act now
+  race() { vibrate(25); },                                  // the table flips to the alarm: only a haptic buzz (no jingle — add a sound here later)
   slam() { play(reactGoodUrl, 0.85); vibrate(12); },        // you reacted in the race
   letter() { play(reactLateUrl, 0.9); vibrate([40, 60, 40]); }, // you were last -> a letter
   gameOver() { play(gameOverUrl, 1.0); vibrate([40, 60, 40, 60, 120]); }, // the ezel is decided
