@@ -120,7 +120,7 @@ export default function Ezelen() {
       <div aria-hidden style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 1, backgroundImage: FILM_GRAIN, backgroundSize: "140px 140px", opacity: reduced.current ? 0.04 : 0.06, mixBlendMode: "overlay" }} />
       <div aria-hidden style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 1, background: "radial-gradient(120% 100% at 50% 40%, transparent 55%, rgba(0,0,0,0.55) 100%)" }} />
 
-      <div style={{ position: "relative", zIndex: 2, maxWidth: 480, margin: "0 auto", minHeight: "100dvh", display: "flex", flexDirection: "column", paddingTop: "env(safe-area-inset-top)" }}>
+      <div style={{ position: "relative", zIndex: 2, maxWidth: 480, margin: "0 auto", minHeight: "100dvh", display: "flex", flexDirection: "column", paddingTop: "env(safe-area-inset-top)", paddingLeft: "env(safe-area-inset-left)", paddingRight: "env(safe-area-inset-right)" }}>
         {screen === "language" && <LanguagePage t={t} current={lang} onPick={chooseLang} />}
         {screen === "home" && (
           <Home t={t} lang={lang} name={name} setName={setName} avatar={avatar} setAvatar={setAvatar}
@@ -311,19 +311,19 @@ function TopBar({ t, st, status, code, amHost, muted, onMute, onLeave, onAdmin, 
   const dot = status === "open" ? "#7bd88f" : status === "reconnecting" ? C.mand : C.faint;
   const round = st && st.ezelen ? st.ezelen.round : 0;
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px 6px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "12px 12px 6px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, overflow: "hidden" }}>
         <Medallion size={24} />
-        <Wordmark size={22} />
-        {round > 0 && <span style={{ fontSize: 11, color: C.faint, alignSelf: "flex-end", marginBottom: 2 }}>{t.round(round)}</span>}
+        <Wordmark size={18} />
+        {round > 0 && <span style={{ fontSize: 11, color: C.faint, whiteSpace: "nowrap" }}>{t.round(round)}</span>}
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
         <span title={status} style={{ width: 8, height: 8, borderRadius: "50%", background: dot, boxShadow: `0 0 8px ${dot}` }} />
-        {code && <span style={{ fontFamily: FR, fontWeight: 700, fontSize: 14, color: C.mand, letterSpacing: "0.12em" }}>{code}</span>}
-        <button aria-label="mute" onClick={onMute} style={iconBtn()}>{muted ? <VolumeX size={15} /> : <Volume2 size={15} />}</button>
-        <button aria-label="uitleg" onClick={onUitleg} style={iconBtn()}><Info size={15} /></button>
-        {amHost && <button aria-label="beheer" onClick={onAdmin} style={iconBtn()}><Settings2 size={15} /></button>}
-        <button aria-label="verlaat" onClick={onLeave} style={iconBtn()}><LogOut size={15} /></button>
+        {code && <span style={{ fontFamily: FR, fontWeight: 700, fontSize: 13.5, color: C.mand, letterSpacing: "0.1em", marginRight: 1 }}>{code}</span>}
+        <button aria-label="mute" onClick={onMute} style={iconBtnSm()}>{muted ? <VolumeX size={15} /> : <Volume2 size={15} />}</button>
+        <button aria-label="uitleg" onClick={onUitleg} style={iconBtnSm()}><Info size={15} /></button>
+        {amHost && <button aria-label="beheer" onClick={onAdmin} style={iconBtnSm()}><Settings2 size={15} /></button>}
+        <button aria-label="verlaat" onClick={onLeave} style={iconBtnSm()}><LogOut size={15} /></button>
       </div>
     </div>
   );
@@ -489,6 +489,7 @@ function Game({ t, st, status, code, myPid, amHost, reduced, act, serverNow, sim
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
       <TopBar t={t} st={st} status={status} code={code} amHost={amHost} muted={muted} onMute={onMute} onLeave={onLeave} onAdmin={onAdmin} onUitleg={onUitleg} />
+      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "flex-end", paddingBottom: 14 }}>
       <Table>
         {arcPositions(opponents.length).map((pos, i) => (
           <OpponentSeat key={opponents[i].id} t={t} p={opponents[i]} pos={pos} phase={phase} isDeclarer={opponents[i].id === declarerId} reacted={reactedIds.includes(opponents[i].id)} chose={pendingIds.includes(opponents[i].id)} count={E ? (E.counts[opponents[i].id] || 0) : 0} reduced={reduced} />
@@ -504,6 +505,7 @@ function Game({ t, st, status, code, myPid, amHost, reduced, act, serverNow, sim
           </div>
         )}
       </Table>
+      </div>
 
       <div style={{ textAlign: "center", minHeight: 22, padding: "10px 16px 2px", fontSize: 13 }}>
         <StatusLine t={t} phase={phase} E={E} bestRank={bestRank} bestCount={bestCount} iAmDeclarer={iAmDeclarer} iReacted={iReacted} myMs={myMs} players={players} youPending={youPending} pendingCount={pendingCount} passTotal={passTotal} />
@@ -527,12 +529,12 @@ function Game({ t, st, status, code, myPid, amHost, reduced, act, serverNow, sim
 /* ---- the skeuomorphic table: walnut rail + green felt + non-clipping seats ---- */
 function Table({ children }) {
   return (
-    <div style={{ padding: "10px 14px 2px" }}>
-      <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1.04", borderRadius: "46% / 44%", padding: 15, background: `linear-gradient(160deg, ${C.rail0}, ${C.rail1} 48%, ${C.rail2})`, boxShadow: "0 22px 44px rgba(0,0,0,0.55), 0 2px 0 rgba(255,255,255,0.10) inset, 0 -10px 22px rgba(0,0,0,0.45) inset" }}>
+    <div style={{ padding: "0 14px", display: "flex", justifyContent: "center" }}>
+      <div style={{ position: "relative", width: "100%", maxWidth: "min(452px, 49vh)", aspectRatio: "1 / 1.3", borderRadius: "46% / 40%", padding: 15, background: `linear-gradient(160deg, ${C.rail0}, ${C.rail1} 48%, ${C.rail2})`, boxShadow: "0 22px 44px rgba(0,0,0,0.55), 0 2px 0 rgba(255,255,255,0.10) inset, 0 -10px 22px rgba(0,0,0,0.45) inset" }}>
         <div aria-hidden style={{ position: "absolute", inset: 0, borderRadius: "46% / 44%", backgroundImage: WOOD_GRAIN, opacity: 0.5, mixBlendMode: "overlay", pointerEvents: "none" }} />
-        <div style={{ position: "relative", width: "100%", height: "100%", borderRadius: "44% / 42%", background: `radial-gradient(120% 120% at 50% 42%, ${C.feltHi} 0%, ${C.feltMid} 52%, ${C.feltLo} 100%)`, boxShadow: `0 0 0 2px ${C.rail2} inset, 0 10px 30px rgba(0,0,0,0.55) inset, 0 -2px 8px rgba(0,0,0,0.4) inset`, overflow: "hidden" }}>
+        <div style={{ position: "relative", width: "100%", height: "100%", borderRadius: "44% / 38%", background: `radial-gradient(120% 120% at 50% 42%, ${C.feltHi} 0%, ${C.feltMid} 52%, ${C.feltLo} 100%)`, boxShadow: `0 0 0 2px ${C.rail2} inset, 0 10px 30px rgba(0,0,0,0.55) inset, 0 -2px 8px rgba(0,0,0,0.4) inset`, overflow: "hidden" }}>
           <div aria-hidden style={{ position: "absolute", inset: 0, backgroundImage: FELT_NOISE, backgroundSize: "200px 200px", opacity: 0.12, mixBlendMode: "soft-light", pointerEvents: "none" }} />
-          <div aria-hidden style={{ position: "absolute", inset: 9, borderRadius: "44% / 42%", border: `1.5px dashed ${C.stitch}`, opacity: 0.7, pointerEvents: "none" }} />
+          <div aria-hidden style={{ position: "absolute", inset: 9, borderRadius: "44% / 38%", border: `1.5px dashed ${C.stitch}`, opacity: 0.7, pointerEvents: "none" }} />
           <div aria-hidden style={{ position: "absolute", inset: 0, background: "radial-gradient(42% 36% at 50% 48%, rgba(0,0,0,0.28), transparent 70%)", pointerEvents: "none" }} />
         </div>
         {/* seats layer — sibling of the felt so seats are NEVER clipped by its overflow */}
@@ -948,16 +950,23 @@ function ghostBtn() { return { display: "flex", alignItems: "center", justifyCon
 function readyDoneBtn() { return { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "14px", borderRadius: 13, cursor: "pointer", color: "#9be3b0", fontWeight: 700, fontSize: 15.5, fontFamily: UI, background: "rgba(123,216,143,0.14)", border: "1px solid rgba(123,216,143,0.5)" }; }
 function textBtn() { return { display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", color: C.muted, fontSize: 12.5, cursor: "pointer", fontFamily: UI }; }
 function iconBtn() { return { display: "grid", placeItems: "center", width: 30, height: 30, borderRadius: 9, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.rim}`, color: C.muted, cursor: "pointer" }; }
+function iconBtnSm() { return { display: "grid", placeItems: "center", width: 30, height: 30, minWidth: 30, borderRadius: 9, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.rim}`, color: C.muted, cursor: "pointer", padding: 0 }; }
 function miniBtn() { return { display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 10px", borderRadius: 9, fontSize: 12, fontFamily: UI, cursor: "pointer", color: C.mand, background: "transparent", border: `1px solid ${C.rim}` }; }
 function adminBtn() { return { flex: 1, padding: "10px", borderRadius: 10, border: `1px solid ${C.rim}`, background: "rgba(242,145,63,0.06)", color: C.mand, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: UI }; }
 function waitBox() { return { borderRadius: 12, padding: "12px 14px", textAlign: "center", fontSize: 13, color: C.muted, background: "rgba(255,255,255,0.04)", border: `1px solid ${C.rim}` }; }
 
+// Seat the opponents evenly AROUND the oval (you sit at the bottom). The span
+// widens as players are added so 3..7 opponents never overlap; a gap stays at the
+// bottom for you. theta is measured from the bottom (180 = top of the table).
 function arcPositions(k) {
+  const cx = 50, cy = 46, rx = 37, ry = 33;
+  if (k <= 0) return [];
+  if (k === 1) return [{ x: cx, y: cy - ry }];
+  const H = Math.min(141, 30 + k * 16); // half-span in degrees
   const pts = [];
   for (let i = 0; i < k; i++) {
-    const t = k === 1 ? 0.5 : i / (k - 1);
-    const ang = (198 - 216 * t) * Math.PI / 180;
-    pts.push({ x: 50 + 41 * Math.cos(ang), y: 45 - 30 * Math.sin(ang) });
+    const theta = (180 - H + 2 * H * (i / (k - 1))) * Math.PI / 180;
+    pts.push({ x: cx + rx * Math.sin(theta), y: cy + ry * Math.cos(theta) });
   }
   return pts;
 }
