@@ -4,6 +4,8 @@ import { createNet, clientId } from "./net.js";
 import { L, LANGS } from "./i18n.js";
 import { sfx, unlock as sfxUnlock, setVolume as sfxSetVolume } from "./sfx.js";
 import medallionUrl from "./assets/logo.webp";
+import feltUrl from "./assets/felt.webp";
+import railUrl from "./assets/rail.webp";
 
 /* ------------------------------------------------------------------ */
 /*  EZELEN — het reactiekaartspel, online op het Kingsen-platform.      */
@@ -26,8 +28,6 @@ const C = {
 const FR = "'Fraunces', Georgia, serif";
 const UI = "'Inter', system-ui, sans-serif";
 
-const FELT_NOISE = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")";
-const WOOD_GRAIN = "repeating-linear-gradient(96deg, rgba(0,0,0,0.16) 0px, rgba(0,0,0,0) 2px, rgba(255,255,255,0.05) 4px, rgba(0,0,0,0) 7px)";
 const FILM_GRAIN = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)'/%3E%3C/svg%3E\")";
 
 // Real card art (the deck Kingsen already ships): src/assets/cards/{RANK}{SUIT}.webp
@@ -39,7 +39,7 @@ function cardSrc(c) { return c && c.suit ? CARD_FACES[String(c.rank) + (c.suit.l
 function cleanName(n) { return String(n || "").replace(/[ -]/g, "").trim().slice(0, 18); }
 const STORE_ROOM = "ezelen_room_v1", STORE_NAME = "ezelen_name_v1", STORE_AVATAR = "ezelen_avatar_v1", STORE_LANG = "ezelen_lang_v1", STORE_VOL = "ezelen_sfxvol_v1", STORE_ADMIN = "ezelen_admin_v1";
 const ADMIN_CODE = "EZELADMIN"; // unlocks the test-bot + beheer controls on this device
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.2.0";
 function loadStore(k) { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch { return null; } }
 function saveStore(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* */ } }
 
@@ -511,7 +511,8 @@ function Game({ t, st, status, code, myPid, amHost, isAdmin, reduced, act, serve
         ))}
         <div style={{ position: "absolute", left: "50%", top: "49%", transform: "translate(-50%,-50%)", zIndex: 6 }}>
           <CenterHero t={t} phase={phase} mySet={mySet} bestRank={bestRank} bestCount={bestCount} myCount={myCount}
-            iAmDeclarer={iAmDeclarer} iReacted={iReacted} myMs={myMs} onDeclare={doDeclare} onReact={doReact} reduced={reduced} />
+            iAmDeclarer={iAmDeclarer} iReacted={iReacted} myMs={myMs} onDeclare={doDeclare} onReact={doReact} reduced={reduced}
+            size={opponents.length >= 6 ? 108 : opponents.length >= 5 ? 120 : 132} />
         </div>
         {me && (
           <div style={{ position: "absolute", left: "50%", bottom: "5%", transform: "translateX(-50%)", textAlign: "center", zIndex: 6 }}>
@@ -550,12 +551,12 @@ function Table({ children, aspect = 1.2 }) {
   const vhCap = Math.round(62 / aspect); // keep the table height <= ~62vh whatever the aspect
   return (
     <div style={{ padding: "0 14px", display: "flex", justifyContent: "center" }}>
-      <div style={{ position: "relative", width: "100%", maxWidth: `min(452px, ${vhCap}vh)`, aspectRatio: `1 / ${aspect}`, borderRadius: "47% / 44%", padding: 15, background: `linear-gradient(160deg, ${C.rail0}, ${C.rail1} 48%, ${C.rail2})`, boxShadow: "0 22px 44px rgba(0,0,0,0.55), 0 2px 0 rgba(255,255,255,0.10) inset, 0 -10px 22px rgba(0,0,0,0.45) inset" }}>
-        <div aria-hidden style={{ position: "absolute", inset: 0, borderRadius: "46% / 44%", backgroundImage: WOOD_GRAIN, opacity: 0.5, mixBlendMode: "overlay", pointerEvents: "none" }} />
-        <div style={{ position: "relative", width: "100%", height: "100%", borderRadius: "45% / 42%", background: `radial-gradient(120% 120% at 50% 42%, ${C.feltHi} 0%, ${C.feltMid} 52%, ${C.feltLo} 100%)`, boxShadow: `0 0 0 2px ${C.rail2} inset, 0 10px 30px rgba(0,0,0,0.55) inset, 0 -2px 8px rgba(0,0,0,0.4) inset`, overflow: "hidden" }}>
-          <div aria-hidden style={{ position: "absolute", inset: 0, backgroundImage: FELT_NOISE, backgroundSize: "200px 200px", opacity: 0.12, mixBlendMode: "soft-light", pointerEvents: "none" }} />
+      <div style={{ position: "relative", width: "100%", maxWidth: `min(452px, ${vhCap}vh)`, aspectRatio: `1 / ${aspect}`, borderRadius: "47% / 44%", padding: 15, backgroundImage: `url(${railUrl})`, backgroundSize: "cover", backgroundPosition: "center", boxShadow: "0 22px 44px rgba(0,0,0,0.55), 0 2px 0 rgba(255,255,255,0.10) inset, 0 -10px 22px rgba(0,0,0,0.45) inset" }}>
+        {/* rail shading: a soft top highlight + edge darkening so the wooden ring reads as rounded */}
+        <div aria-hidden style={{ position: "absolute", inset: 0, borderRadius: "47% / 44%", background: "radial-gradient(120% 115% at 50% 30%, rgba(255,255,255,0.12), transparent 42%, rgba(0,0,0,0.5) 100%)", pointerEvents: "none" }} />
+        <div style={{ position: "relative", width: "100%", height: "100%", borderRadius: "45% / 42%", backgroundImage: `url(${feltUrl})`, backgroundSize: "cover", backgroundPosition: "center", boxShadow: `0 0 0 2px ${C.rail2} inset, 0 10px 30px rgba(0,0,0,0.55) inset, 0 -2px 8px rgba(0,0,0,0.4) inset`, overflow: "hidden" }}>
           <div aria-hidden style={{ position: "absolute", inset: 9, borderRadius: "45% / 42%", border: `1.5px dashed ${C.stitch}`, opacity: 0.7, pointerEvents: "none" }} />
-          <div aria-hidden style={{ position: "absolute", inset: 0, background: "radial-gradient(42% 36% at 50% 48%, rgba(0,0,0,0.28), transparent 70%)", pointerEvents: "none" }} />
+          <div aria-hidden style={{ position: "absolute", inset: 0, background: "radial-gradient(42% 36% at 50% 48%, rgba(0,0,0,0.26), transparent 70%)", pointerEvents: "none" }} />
         </div>
         {/* seats layer — sibling of the felt so seats are NEVER clipped by its overflow */}
         <div style={{ position: "absolute", inset: 15, pointerEvents: "none" }}>
@@ -588,8 +589,8 @@ function OpponentSeat({ t, p, pos, phase, isDeclarer, reacted, chose, count, red
   );
 }
 
-function CenterHero({ t, phase, mySet, bestRank, bestCount, myCount, iAmDeclarer, iReacted, myMs, onDeclare, onReact, reduced }) {
-  const SIZE = 132;
+function CenterHero({ t, phase, mySet, bestRank, bestCount, myCount, iAmDeclarer, iReacted, myMs, onDeclare, onReact, reduced, size = 132 }) {
+  const SIZE = size;
   if (phase === "race") {
     if (iAmDeclarer) {
       return (
@@ -1151,7 +1152,7 @@ function waitBox() { return { borderRadius: 12, padding: "12px 14px", textAlign:
 // widens as players are added so 3..7 opponents never overlap; a gap stays at the
 // bottom for you. theta is measured from the bottom (180 = top of the table).
 function arcPositions(k) {
-  const cx = 50, cy = 46, rx = 37, ry = 33;
+  const cx = 50, cy = 46, rx = 31, ry = 31;
   if (k <= 0) return [];
   if (k === 1) return [{ x: cx, y: cy - ry }];
   const H = Math.min(141, 30 + k * 16); // half-span in degrees
