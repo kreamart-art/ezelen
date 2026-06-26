@@ -417,6 +417,9 @@ function Game({ t, st, status, code, myPid, amHost, reduced, act, serverNow, sim
   const players = st.players || [];
   const me = players.find((p) => p.id === myPid);
   const opponents = players.filter((p) => p.id !== myPid);
+  // the table grows (taller oval = more seating room) with the player count, so
+  // everyone always fits; few players get a compact table.
+  const tableAspect = 1.05 + Math.min(1, Math.max(0, (opponents.length - 2) / 5)) * 0.27;
 
   const phase = E ? E.phase : "passing";
   const myHand = (E && E.yourHand) || [];
@@ -490,7 +493,7 @@ function Game({ t, st, status, code, myPid, amHost, reduced, act, serverNow, sim
     <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
       <TopBar t={t} st={st} status={status} code={code} amHost={amHost} muted={muted} onMute={onMute} onLeave={onLeave} onAdmin={onAdmin} onUitleg={onUitleg} />
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "flex-end", paddingBottom: 14 }}>
-      <Table>
+      <Table aspect={tableAspect}>
         {arcPositions(opponents.length).map((pos, i) => (
           <OpponentSeat key={opponents[i].id} t={t} p={opponents[i]} pos={pos} phase={phase} isDeclarer={opponents[i].id === declarerId} reacted={reactedIds.includes(opponents[i].id)} chose={pendingIds.includes(opponents[i].id)} count={E ? (E.counts[opponents[i].id] || 0) : 0} reduced={reduced} />
         ))}
@@ -527,14 +530,15 @@ function Game({ t, st, status, code, myPid, amHost, reduced, act, serverNow, sim
 }
 
 /* ---- the skeuomorphic table: walnut rail + green felt + non-clipping seats ---- */
-function Table({ children }) {
+function Table({ children, aspect = 1.2 }) {
+  const vhCap = Math.round(62 / aspect); // keep the table height <= ~62vh whatever the aspect
   return (
     <div style={{ padding: "0 14px", display: "flex", justifyContent: "center" }}>
-      <div style={{ position: "relative", width: "100%", maxWidth: "min(452px, 49vh)", aspectRatio: "1 / 1.3", borderRadius: "46% / 40%", padding: 15, background: `linear-gradient(160deg, ${C.rail0}, ${C.rail1} 48%, ${C.rail2})`, boxShadow: "0 22px 44px rgba(0,0,0,0.55), 0 2px 0 rgba(255,255,255,0.10) inset, 0 -10px 22px rgba(0,0,0,0.45) inset" }}>
+      <div style={{ position: "relative", width: "100%", maxWidth: `min(452px, ${vhCap}vh)`, aspectRatio: `1 / ${aspect}`, borderRadius: "47% / 44%", padding: 15, background: `linear-gradient(160deg, ${C.rail0}, ${C.rail1} 48%, ${C.rail2})`, boxShadow: "0 22px 44px rgba(0,0,0,0.55), 0 2px 0 rgba(255,255,255,0.10) inset, 0 -10px 22px rgba(0,0,0,0.45) inset" }}>
         <div aria-hidden style={{ position: "absolute", inset: 0, borderRadius: "46% / 44%", backgroundImage: WOOD_GRAIN, opacity: 0.5, mixBlendMode: "overlay", pointerEvents: "none" }} />
-        <div style={{ position: "relative", width: "100%", height: "100%", borderRadius: "44% / 38%", background: `radial-gradient(120% 120% at 50% 42%, ${C.feltHi} 0%, ${C.feltMid} 52%, ${C.feltLo} 100%)`, boxShadow: `0 0 0 2px ${C.rail2} inset, 0 10px 30px rgba(0,0,0,0.55) inset, 0 -2px 8px rgba(0,0,0,0.4) inset`, overflow: "hidden" }}>
+        <div style={{ position: "relative", width: "100%", height: "100%", borderRadius: "45% / 42%", background: `radial-gradient(120% 120% at 50% 42%, ${C.feltHi} 0%, ${C.feltMid} 52%, ${C.feltLo} 100%)`, boxShadow: `0 0 0 2px ${C.rail2} inset, 0 10px 30px rgba(0,0,0,0.55) inset, 0 -2px 8px rgba(0,0,0,0.4) inset`, overflow: "hidden" }}>
           <div aria-hidden style={{ position: "absolute", inset: 0, backgroundImage: FELT_NOISE, backgroundSize: "200px 200px", opacity: 0.12, mixBlendMode: "soft-light", pointerEvents: "none" }} />
-          <div aria-hidden style={{ position: "absolute", inset: 9, borderRadius: "44% / 38%", border: `1.5px dashed ${C.stitch}`, opacity: 0.7, pointerEvents: "none" }} />
+          <div aria-hidden style={{ position: "absolute", inset: 9, borderRadius: "45% / 42%", border: `1.5px dashed ${C.stitch}`, opacity: 0.7, pointerEvents: "none" }} />
           <div aria-hidden style={{ position: "absolute", inset: 0, background: "radial-gradient(42% 36% at 50% 48%, rgba(0,0,0,0.28), transparent 70%)", pointerEvents: "none" }} />
         </div>
         {/* seats layer — sibling of the felt so seats are NEVER clipped by its overflow */}
