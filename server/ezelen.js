@@ -43,8 +43,11 @@ const DEFAULT_OPDRACHTEN = [
 // ---- timing (ms) ----
 const RACE_CAP_MS = 3000;          // resolve the race at most this long after the declare
 const RESULT_MS = 4600;            // round-result reveal before the next round is dealt
-const STALL_MS = 11000;            // a connected human holding 4+ (no set) this long -> auto-pass their worst
-const DISCONNECT_PASS_MS = 1100;   // a disconnected holder of 4+ -> auto-pass quickly so the loop never freezes
+// Lockstep passing: a swap only happens once EVERYONE has chosen the card they
+// shove left, so nobody piles up. These are only safety nets against an AFK seat.
+const STALL_MS = 13000;            // a connected human who hasn't chosen this long -> auto-choose their worst
+const SET_SAFETY_MS = 25000;       // a connected player sits on a set this long without declaring -> auto-declare (unstick)
+const DISCONNECT_PASS_MS = 900;    // a disconnected seat auto-chooses quickly so the round never freezes
 const BOT_PASS_MIN = 650, BOT_PASS_MAX = 1600;
 const BOT_REACT_MIN = 360, BOT_REACT_MAX = 1500;
 
@@ -119,7 +122,8 @@ export function ezelenDeal(room) {
   E.round = (E.round || 0) + 1;
   E.declarerId = null; E.rank = null; E.raceStartTs = 0;
   E.reactions = {}; E.result = null; E.resultAt = 0;
-  E.lastHeldSince = {}; E.botPassAt = {}; E.botReactAt = {}; E.discPassAt = {};
+  E.pending = {};             // lockstep: {pid: cardId} each player has CHOSEN to shove this round
+  E.lastHeldSince = {}; E.setSince = {}; E.botPassAt = {}; E.botReactAt = {}; E.discPassAt = {};
   E.startedAt = Date.now();
   // stagger the bots' first pass so they don't move in lockstep
   players.forEach((p) => { if (p.bot) E.botPassAt[p.id] = Date.now() + rand(0, 700); });
@@ -207,6 +211,27 @@ function resolveRace(room) {
   }
 }
 
+/* ---- lockstep passing: everyone CHOOSES the card they shove, and the cards only
+   move once every seat has chosen — so nobody can pile up cards while waiting. ---- */
+function maybeResolvePass(room) {
+  const E = room.ezelen;
+  if (!E || E.phase !== "passing") return false;
+  // a connected player holding four must declare first — freeze the swap for them
+  if (room.players.some((p) => p.connected && setRankOf(E.hands[p.id] || [], E.cards))) return false;
+  const inGame = room.players.filter((p) => E.hands[p.id]);
+  if (inGame.length < 2) return false;
+  if (inGame.every((p) => E.pending[p.id] != null)) { resolvePass(room); return true; }
+  return false;
+}
+function resolvePass(room) {
+  const E = room.ezelen;
+  // each chosen card is distinct and still in its owner's hand, so moving them in
+  // order is equivalent to moving them simultaneously (a received card has a new id)
+  const entries = room.players.map((p) => [p.id, E.pending[p.id]]).filter(([, cid]) => cid != null);
+  for (const [from, cid] of entries) doPass(room, from, cid);
+  E.pending = {};
+}
+
 /* ---- action dispatch. Returns {room} / {error} when handled, or null to let
    the shared (kingsen) switch handle generic lobby actions. ---- */
 export function ezelenAction(room, playerId, type, payload, ctx) {
@@ -255,13 +280,17 @@ export function ezelenAction(room, playerId, type, payload, ctx) {
       return { room };
     }
     case "pass": {
+      // choose (or re-choose) the card you shove left this round; it only moves
+      // once everyone has chosen (lockstep), so you never pile up cards.
       if (!E || E.phase !== "passing") return { error: "Niet nu" };
       const hand = E.hands[playerId];
       if (!hand) return { room };
-      if (hand.length < 4) return { error: "Wacht op een kaart van rechts" };
       if (setRankOf(hand, E.cards)) return { error: "Je hebt vier gelijk, sla op tafel" };
       const cardId = Number(payload && payload.cardId);
-      if (!doPass(room, playerId, cardId)) return { error: "Die kaart heb je niet" };
+      if (hand.indexOf(cardId) < 0) return { error: "Die kaart heb je niet" };
+      E.pending[playerId] = cardId;
+      delete E.lastHeldSince[playerId];
+      maybeResolvePass(room);
       return { room };
     }
     case "declare": {
@@ -296,6 +325,7 @@ export function ezelenAction(room, playerId, type, payload, ctx) {
       // passing round stays playable, then let the shared `leave` remove them.
       if (E && playerId !== room.hostId) {
         if (E.phase === "passing") {
+          if (E.pending) delete E.pending[playerId];
           const hand = E.hands[playerId];
           if (hand && hand.length) { const left = leftNeighbourId(room, playerId); if (left != null) { E.hands[left].push(...hand); E.hands[playerId] = []; } }
         } else if (E.phase === "race" && playerId === E.declarerId) {
@@ -401,43 +431,34 @@ export function ezelenTick(room, now) {
       if (!hand) continue;
       const hasSet = !!setRankOf(hand, E.cards);
 
+      // someone holds four. Bots declare after a beat; a connected human declares
+      // manually (with a long safety so an AFK seat can't freeze the table). A
+      // disconnected set-holder is NOT declared for — it falls to the auto-choose
+      // below, which shoves a card (breaking the set) to keep the loop alive.
+      if (hasSet && p.connected) {
+        if (p.bot) { if (now >= (E.botPassAt[p.id] || 0)) { igniteRace(room, p.id, setRankOf(hand, E.cards)); return true; } }
+        else {
+          if (!E.setSince[p.id]) E.setSince[p.id] = now;
+          else if (now - E.setSince[p.id] > SET_SAFETY_MS) { igniteRace(room, p.id, setRankOf(hand, E.cards)); return true; }
+        }
+        continue; // a connected set-holder never queues a pass
+      }
+      if (!hasSet) delete E.setSince[p.id];
+
+      if (E.pending[p.id] != null) continue; // already chose this round
+
       if (!p.connected) {
-        // keep the loop alive: auto-pass a dropped player's worst card (even if it
-        // breaks a set — they left; we never auto-DECLARE for them)
-        if (hand.length >= 4) {
-          if (now >= (E.discPassAt[p.id] || 0)) {
-            const c = worstCard(hand, E.cards);
-            if (c != null && doPass(room, p.id, c)) { changed = true; }
-            E.discPassAt[p.id] = now + DISCONNECT_PASS_MS;
-          }
-        }
-        continue;
-      }
-
-      if (p.bot) {
-        if (hasSet) {
-          // bots declare their own set (manual declare for everyone) after a short beat
-          if (now >= (E.botPassAt[p.id] || 0)) { igniteRace(room, p.id, setRankOf(hand, E.cards)); changed = true; return changed; }
-        } else if (hand.length >= 4 && now >= (E.botPassAt[p.id] || 0)) {
-          const c = worstCard(hand, E.cards);
-          if (c != null && doPass(room, p.id, c)) changed = true;
-          E.botPassAt[p.id] = now + rand(BOT_PASS_MIN, BOT_PASS_MAX);
-        }
-        continue;
-      }
-
-      // connected human: anti-stall (holding 4+ with no set for too long -> nudge a pass)
-      if (hand.length >= 4 && !hasSet) {
-        if (!E.lastHeldSince[p.id]) E.lastHeldSince[p.id] = now;
-        else if (now - E.lastHeldSince[p.id] > STALL_MS) {
-          const c = worstCard(hand, E.cards);
-          if (c != null && doPass(room, p.id, c)) changed = true;
-          delete E.lastHeldSince[p.id];
-        }
+        // disconnected seat: auto-choose its worst quickly so the round isn't blocked
+        if (now >= (E.discPassAt[p.id] || 0)) { const c = worstCard(hand, E.cards); if (c != null) { E.pending[p.id] = c; changed = true; } E.discPassAt[p.id] = now + DISCONNECT_PASS_MS; }
+      } else if (p.bot) {
+        if (now >= (E.botPassAt[p.id] || 0)) { const c = worstCard(hand, E.cards); if (c != null) { E.pending[p.id] = c; changed = true; } E.botPassAt[p.id] = now + rand(BOT_PASS_MIN, BOT_PASS_MAX); }
       } else {
-        delete E.lastHeldSince[p.id];
+        // connected human: wait for their tap; only auto-choose if truly AFK
+        if (!E.lastHeldSince[p.id]) E.lastHeldSince[p.id] = now;
+        else if (now - E.lastHeldSince[p.id] > STALL_MS) { const c = worstCard(hand, E.cards); if (c != null) { E.pending[p.id] = c; changed = true; } delete E.lastHeldSince[p.id]; }
       }
     }
+    if (maybeResolvePass(room)) changed = true; // the simultaneous swap, once everyone has chosen
     return changed;
   }
 
@@ -455,6 +476,8 @@ export function ezelenPublic(room, viewerId) {
   const yourHand = yourIds.map((id) => ({ id, rank: E.cards[id].rank, suit: E.cards[id].suit }));
   const yourSet = setRankOf(yourIds, E.cards);
   const [bRank, bCount] = bestRank(yourIds, E.cards);
+  const pending = E.pending || {};
+  const pendingIds = Object.keys(pending).filter((id) => pending[id] != null);
   return {
     phase: E.phase,
     round: E.round || 0,
@@ -466,6 +489,9 @@ export function ezelenPublic(room, viewerId) {
     yourBestRank: bRank,
     yourBestCount: bCount,
     yourCount: yourIds.length,
+    youPending: pending[viewerId] != null ? pending[viewerId] : null, // the card you chose to shove
+    pendingIds,                                                        // who has chosen this round
+    passTotal: room.players.filter((p) => (E.hands[p.id] || []).length).length, // seats in play
     declarerId: E.declarerId || null,
     rank: E.rank || null,
     raceStartTs: E.raceStartTs || 0,

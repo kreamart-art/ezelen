@@ -145,25 +145,48 @@ export default function Ezelen() {
 }
 
 /* ============================ INTRO (Artnomad) ============================ */
-function Intro({ t, reduced, onDone }) {
-  const [armed, setArmed] = useState(false);
-  useEffect(() => {
-    const a = setTimeout(() => setArmed(true), reduced ? 0 : 900);
-    const f = setTimeout(() => onDone(), reduced ? 700 : 5000); // silent fallback if never tapped
-    return () => { clearTimeout(a); clearTimeout(f); };
-  }, [onDone, reduced]);
-  function go() { sfxUnlock(); sfx.intro(); setTimeout(onDone, reduced ? 0 : 520); }
+// Same intro as Kings: a typewriter that types "An Artnomad Game" with a key-
+// strike per character + a carriage bell at the end, then goes to the language
+// screen. Waits for a tap (which unlocks audio so the sound plays) and also
+// auto-runs silently after a short wait so it is never a dead end.
+const INTRO_TEXT = "An Artnomad Game";
+function Intro({ reduced, onDone }) {
+  const [typed, setTyped] = useState(0);
+  const [started, setStarted] = useState(false);
+  const ran = useRef(false), cancelled = useRef(false);
+  const run = useCallback((withSound) => {
+    if (ran.current) return;
+    ran.current = true; setStarted(true);
+    const full = INTRO_TEXT.length;
+    if (reduced) { setTyped(full); setTimeout(onDone, 900); return; }
+    if (withSound) sfxUnlock();
+    setTyped(0);
+    let i = 0; const PER = 135;
+    const step = () => {
+      if (cancelled.current) return;
+      i += 1; setTyped(i);
+      const ch = INTRO_TEXT[i - 1];
+      if (withSound && ch && ch !== " ") sfx.type();
+      if (i < full) setTimeout(step, PER);
+      else { if (withSound) sfx.ding(); setTimeout(onDone, 1300); }
+    };
+    setTimeout(step, 350);
+  }, [reduced, onDone]);
+  useEffect(() => { const tmo = setTimeout(() => run(false), 2200); return () => clearTimeout(tmo); }, [run]); // silent fallback
+  function onTap() { if (ran.current) { cancelled.current = true; onDone(); } else run(true); }
+  const shown = INTRO_TEXT.slice(0, typed);
+  const done = typed >= INTRO_TEXT.length;
   return (
-    <div onClick={go} role="button" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && go()}
-      style={{ position: "fixed", inset: 0, zIndex: 60, background: C.bg, display: "grid", placeItems: "center", cursor: "pointer", animation: reduced ? "none" : "splashFade 5s ease both" }}>
-      <div style={{ textAlign: "center", padding: 24 }}>
-        <div style={{ width: 58, height: 58, margin: "0 auto 18px", borderRadius: "50%", border: `1.5px solid ${C.rim}`, display: "grid", placeItems: "center", background: "radial-gradient(circle at 50% 35%, rgba(242,145,63,0.16), transparent 70%)", animation: reduced ? "none" : "ezPop 700ms ease both" }}>
-          <div style={{ width: 22, height: 22, borderRadius: "50%", background: `linear-gradient(180deg, ${C.mandLite}, ${C.mandDeep})`, boxShadow: `0 0 22px ${C.glowWarm}` }} />
-        </div>
-        <div style={{ fontFamily: FR, fontWeight: 600, letterSpacing: "0.42em", fontSize: 18, color: C.mand, paddingLeft: "0.42em" }}>ARTNOMAD</div>
-        <div style={{ marginTop: 10, fontSize: 11, letterSpacing: "0.26em", color: C.faint, textTransform: "uppercase" }}>{t.presents}</div>
-        <div style={{ marginTop: 26, fontFamily: FR, fontWeight: 900, fontSize: 30, letterSpacing: "0.03em", color: C.text, opacity: armed ? 1 : 0, transition: "opacity 500ms" }}>EZELEN</div>
-        <div style={{ marginTop: 22, fontSize: 12, color: C.faint, opacity: armed ? 1 : 0, transition: "opacity 600ms", animation: armed && !reduced ? "ezPulse 1.6s ease-in-out infinite" : "none" }}>tik om te beginnen</div>
+    <div onClick={onTap} role="button" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && onTap()} aria-label={INTRO_TEXT}
+      style={{ position: "fixed", inset: 0, zIndex: 60, background: C.bg, display: "grid", placeItems: "center", cursor: "pointer", padding: "8vw" }}>
+      <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", animation: reduced ? "none" : "ezIn .5s ease both" }}>
+        <span style={{ position: "relative", display: "inline-block", fontFamily: FR, fontWeight: 900, fontSize: "clamp(18px,5.4vw,30px)", lineHeight: 1, letterSpacing: "0.4px", color: C.text, whiteSpace: "nowrap", textShadow: "0 2px 18px rgba(0,0,0,.55)" }}>
+          <span aria-hidden style={{ visibility: "hidden" }}>{INTRO_TEXT}</span>
+          <span style={{ position: "absolute", left: 0, top: 0, whiteSpace: "nowrap" }}>
+            {shown}<span className={"ez-caret" + (done || !started ? " ez-caret-blink" : "")} style={{ display: "inline-block", marginLeft: 1, color: C.mand, fontWeight: 400, transform: "translateY(-1px)" }}>|</span>
+          </span>
+        </span>
+        {!started && <span style={{ marginTop: 18, fontSize: 11, letterSpacing: "0.25em", textTransform: "uppercase", color: "rgba(242,145,63,0.55)", animation: reduced ? "none" : "ezTap 1.6s ease-in-out infinite" }}>tik om te starten · tap to start</span>}
       </div>
     </div>
   );
@@ -395,7 +418,11 @@ function Game({ t, st, status, code, myPid, amHost, reduced, act, serverNow, sim
   const myCount = E ? E.yourCount : myHand.length;
   const bestRank = E ? E.yourBestRank : null;
   const bestCount = E ? E.yourBestCount : 0;
-  const canPass = phase === "passing" && myCount >= 4 && !mySet;
+  const youPending = E ? E.youPending : null;            // the card you chose to shove (lockstep)
+  const pendingIds = (E && E.pendingIds) || [];
+  const pendingCount = pendingIds.length;
+  const passTotal = E ? (E.passTotal || players.length) : players.length;
+  const canPass = phase === "passing" && !mySet;          // pick / re-pick any time until the swap
   const declarerId = E ? E.declarerId : null;
   const iAmDeclarer = declarerId === myPid;
   const reactedIds = (E && E.reactedIds) || [];
@@ -449,7 +476,7 @@ function Game({ t, st, status, code, myPid, amHost, reduced, act, serverNow, sim
       <TopBar t={t} st={st} status={status} code={code} amHost={amHost} muted={muted} onMute={onMute} onLeave={onLeave} onAdmin={onAdmin} onUitleg={onUitleg} />
       <Table>
         {arcPositions(opponents.length).map((pos, i) => (
-          <OpponentSeat key={opponents[i].id} t={t} p={opponents[i]} pos={pos} phase={phase} isDeclarer={opponents[i].id === declarerId} reacted={reactedIds.includes(opponents[i].id)} count={E ? (E.counts[opponents[i].id] || 0) : 0} reduced={reduced} />
+          <OpponentSeat key={opponents[i].id} t={t} p={opponents[i]} pos={pos} phase={phase} isDeclarer={opponents[i].id === declarerId} reacted={reactedIds.includes(opponents[i].id)} chose={pendingIds.includes(opponents[i].id)} count={E ? (E.counts[opponents[i].id] || 0) : 0} reduced={reduced} />
         ))}
         <div style={{ position: "absolute", left: "50%", top: "49%", transform: "translate(-50%,-50%)", zIndex: 6 }}>
           <CenterHero t={t} phase={phase} mySet={mySet} bestRank={bestRank} bestCount={bestCount} myCount={myCount}
@@ -464,14 +491,14 @@ function Game({ t, st, status, code, myPid, amHost, reduced, act, serverNow, sim
       </Table>
 
       <div style={{ textAlign: "center", minHeight: 22, padding: "10px 16px 2px", fontSize: 13 }}>
-        <StatusLine t={t} phase={phase} E={E} myCount={myCount} bestRank={bestRank} bestCount={bestCount} iAmDeclarer={iAmDeclarer} iReacted={iReacted} myMs={myMs} players={players} />
+        <StatusLine t={t} phase={phase} E={E} bestRank={bestRank} bestCount={bestCount} iAmDeclarer={iAmDeclarer} iReacted={iReacted} myMs={myMs} players={players} youPending={youPending} pendingCount={pendingCount} passTotal={passTotal} />
       </div>
 
       <div style={{ padding: "4px 12px calc(16px + env(safe-area-inset-bottom))" }}>
         <div style={{ textAlign: "center", fontSize: 11, color: C.faint, marginBottom: 8 }}>
-          {phase === "passing" ? (mySet ? t.handHasSet : myCount >= 4 ? t.handPass : t.handWait) : t.yourCards}
+          {phase === "passing" ? (mySet ? t.handHasSet : youPending != null ? t.handChosen(pendingCount, passTotal) : t.handChoose) : t.yourCards}
         </div>
-        <Fan hand={myHand} collectRank={bestRank} disabled={!canPass} freshId={freshId.current} locked={!!mySet} onTap={doPass} reduced={reduced} />
+        <Fan hand={myHand} collectRank={bestRank} disabled={!canPass} freshId={freshId.current} locked={!!mySet} pendingId={youPending} onTap={doPass} reduced={reduced} />
       </div>
 
       {phase === "result" && E.result && <ResultOverlay t={t} E={E} myPid={myPid} amHost={amHost} act={act} />}
@@ -500,20 +527,23 @@ function Table({ children }) {
   );
 }
 
-function OpponentSeat({ t, p, pos, phase, isDeclarer, reacted, count, reduced }) {
-  const thinking = phase === "passing" && count > 4;
+function OpponentSeat({ t, p, pos, phase, isDeclarer, reacted, chose, count, reduced }) {
+  const choosing = phase === "passing" && p.connected && !isDeclarer && !chose; // still picking their pass
+  const passedOk = phase === "passing" && chose && !isDeclarer;
   const dim = phase === "race" && !reacted && !isDeclarer ? 1 : phase === "race" ? 0.5 : 1;
+  const ring = isDeclarer ? C.alarm : reacted && phase === "race" ? C.mand : passedOk ? "rgba(123,216,143,0.6)" : C.rim;
+  const statusTxt = isDeclarer ? t.fourAlike : reacted && phase === "race" ? t.tapped : !p.connected ? t.offline : phase === "passing" ? (chose ? t.chosePassed : t.choosing) : t.nCards(count);
+  const statusColor = isDeclarer ? C.alarm : reacted && phase === "race" ? C.mand : passedOk ? "#7bd88f" : C.faint;
   return (
     <div style={{ position: "absolute", left: `${pos.x}%`, top: `${pos.y}%`, transform: "translate(-50%,-50%)", width: 72, textAlign: "center", zIndex: 5, opacity: dim, transition: "opacity 160ms" }}>
       <div style={{ position: "relative", width: 44, height: 44, margin: "0 auto" }}>
-        <Avatar p={p} size={44} ring={isDeclarer ? C.alarm : reacted && phase === "race" ? C.mand : C.rim} />
+        <Avatar p={p} size={44} ring={ring} />
         {isDeclarer && phase === "race" && <span aria-hidden className={reduced ? "" : "ez-alarmring"} style={{ position: "absolute", inset: -4, borderRadius: "50%", border: `2px solid ${C.alarm}` }} />}
-        {thinking && <span aria-hidden style={{ position: "absolute", top: -2, right: -2, width: 9, height: 9, borderRadius: "50%", background: C.mand, boxShadow: `0 0 8px ${C.mand}`, animation: reduced ? "none" : "ezThink 1s ease-in-out infinite" }} />}
+        {choosing && <span aria-hidden style={{ position: "absolute", top: -2, right: -2, width: 9, height: 9, borderRadius: "50%", background: C.mand, boxShadow: `0 0 8px ${C.mand}`, animation: reduced ? "none" : "ezThink 1s ease-in-out infinite" }} />}
+        {passedOk && <span aria-hidden style={{ position: "absolute", top: -3, right: -3, width: 15, height: 15, borderRadius: "50%", background: "#7bd88f", display: "grid", placeItems: "center", color: "#0c1413" }}><Check size={10} /></span>}
       </div>
       <div style={{ fontSize: 11.5, fontWeight: 600, color: C.text, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
-      <div style={{ fontSize: 10, color: isDeclarer ? C.alarm : reacted && phase === "race" ? C.mand : C.faint, height: 13 }}>
-        {isDeclarer ? t.fourAlike : reacted && phase === "race" ? t.tapped : !p.connected ? t.offline : t.nCards(count)}
-      </div>
+      <div style={{ fontSize: 10, color: statusColor, height: 13 }}>{statusTxt}</div>
       <Pips letters={p.letters || 0} small />
     </div>
   );
@@ -568,7 +598,7 @@ function CenterHero({ t, phase, mySet, bestRank, bestCount, myCount, iAmDeclarer
   );
 }
 
-function StatusLine({ t, phase, E, myCount, bestRank, bestCount, iAmDeclarer, iReacted, myMs, players }) {
+function StatusLine({ t, phase, E, bestRank, bestCount, iAmDeclarer, iReacted, myMs, players, youPending, pendingCount, passTotal }) {
   if (phase === "race") {
     const decl = players.find((p) => p.id === E.declarerId);
     if (iAmDeclarer) return <span style={{ color: C.mand, fontFamily: FR }}>{t.safeFirst}</span>;
@@ -577,27 +607,34 @@ function StatusLine({ t, phase, E, myCount, bestRank, bestCount, iAmDeclarer, iR
   }
   if (phase === "passing") {
     if (E && E.yourSet) return <span style={{ color: C.mand, fontWeight: 600 }}>{t.fourReady(t.rank(E.yourSet))}</span>;
+    if (youPending != null) return <span style={{ color: C.muted }}>{t.chosenWait(pendingCount, passTotal)}</span>;
     return <span style={{ color: C.muted }}>{t.collect(bestCount || 0, t.rank(bestRank))}</span>;
   }
   return <span style={{ color: C.faint }}>&nbsp;</span>;
 }
 
-function Fan({ hand, collectRank, disabled, freshId, locked, onTap, reduced }) {
+// In lockstep the hand is always at most 4 cards, so they sit side by side with a
+// small gap (no overlap) at the real card aspect ratio (320x465) — every card,
+// incl. its index corners, is fully visible. The card you chose to shove lifts up.
+function Fan({ hand, collectRank, disabled, freshId, locked, pendingId, onTap, reduced }) {
   const n = hand.length;
+  const W = n >= 6 ? 52 : 64; // shrink a touch only if somehow more than 5 cards
   return (
-    <div style={{ display: "flex", justifyContent: "center", alignItems: "flex-end", minHeight: 104 }}>
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "flex-end", gap: 6, minHeight: 110 }}>
       {hand.map((c, i) => {
         const mid = (n - 1) / 2;
-        const rot = (i - mid) * 4.5;
-        const lift = Math.abs(i - mid) * 3;
+        const rot = (i - mid) * 2.5;
         const glow = collectRank && c.rank === collectRank;
+        const chosen = pendingId != null && c.id === pendingId;
+        const lift = chosen ? 18 : glow ? 7 : 0;
         const src = cardSrc(c);
+        const ringShadow = chosen ? `0 0 0 2.5px ${C.mandLite}, 0 12px 22px ${C.glowWarm}` : glow ? `0 0 0 2px ${C.mand}, 0 8px 18px ${C.glowWarm}` : "0 4px 12px rgba(0,0,0,0.5)";
         return (
           <button key={c.id} onClick={() => onTap(c.id)} disabled={disabled} className={freshId === c.id && !reduced ? "ez-newcard" : ""} aria-label={`${c.rank} ${c.suit.sym}`}
-            style={{ width: 60, height: 86, marginLeft: i === 0 ? 0 : -16, padding: 0, border: "none", borderRadius: 8, background: "transparent",
-              transform: `rotate(${rot}deg) translateY(${glow ? lift - 8 : lift}px)`, transformOrigin: "bottom center",
-              cursor: disabled ? "default" : "pointer", opacity: disabled && !locked ? 0.92 : 1, position: "relative", transition: "transform 160ms" }}>
-            {src ? <img src={src} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8, display: "block", boxShadow: glow ? `0 0 0 2px ${C.mand}, 0 8px 18px ${C.glowWarm}` : "0 4px 12px rgba(0,0,0,0.5)" }} /> : <FallbackCard c={c} glow={glow} />}
+            style={{ width: W, aspectRatio: "320 / 465", padding: 0, border: "none", borderRadius: 7, background: "transparent",
+              transform: `rotate(${rot}deg) translateY(${-lift}px)`, transformOrigin: "bottom center",
+              cursor: disabled ? "default" : "pointer", opacity: disabled && !locked && !chosen ? 0.9 : 1, position: "relative", transition: "transform 160ms" }}>
+            {src ? <img src={src} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 7, display: "block", boxShadow: ringShadow }} /> : <FallbackCard c={c} glow={glow || chosen} />}
           </button>
         );
       })}
@@ -895,6 +932,10 @@ function GlobalStyle() {
       @keyframes ezPulse { 0%,100% { opacity:.5 } 50% { opacity:1 } }
       @keyframes ezSpin { to { transform: rotate(360deg) } }
       @keyframes splashFade { 0% { opacity:0 } 8% { opacity:1 } 92% { opacity:1 } 100% { opacity:1 } }
+      @keyframes ezIn { from { opacity:0; transform: translateY(8px) } to { opacity:1; transform:none } }
+      @keyframes ezTap { 0%,100% { opacity:.45 } 50% { opacity:.9 } }
+      @keyframes ezCaret { 0%,49% { opacity:1 } 50%,100% { opacity:0 } }
+      .ez-caret-blink { animation: ezCaret 1s steps(1,end) infinite; }
       .ez-stamp { animation: ezStamp 260ms ease both; }
       .ez-newcard { animation: ezNewcard 260ms ease both; }
       .ez-alarmring { animation: ezAlarmRing 1.1s ease-out infinite; }
@@ -904,7 +945,7 @@ function GlobalStyle() {
       .ez-spin { animation: ezSpin 800ms linear infinite; }
       .ez-slam:focus-visible, button:focus-visible { outline: 3px solid ${C.mandLite}; outline-offset: 3px; }
       input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid ${C.mand}; outline-offset: 1px; }
-      @media (prefers-reduced-motion: reduce) { .ez-stamp,.ez-newcard,.ez-alarmring,.ez-slam-live,.ez-declare,.ez-flow,.ez-spin { animation: none !important; } }
+      @media (prefers-reduced-motion: reduce) { .ez-stamp,.ez-newcard,.ez-alarmring,.ez-slam-live,.ez-declare,.ez-flow,.ez-spin,.ez-caret-blink { animation: none !important; } }
     `}</style>
   );
 }

@@ -14,6 +14,7 @@ import cheersUrl from "./assets/cheers.mp3";
 import mythicKingUrl from "./assets/mythic-king.mp3";
 import mgIntroUrl from "./assets/mg-intro.mp3";
 import twBellUrl from "./assets/tw-bell.mp3";
+import twKeyUrl from "./assets/tw-key.mp3";
 
 let _muted = false;
 export function setMuted(m) { _muted = !!m; }
@@ -70,7 +71,7 @@ function tone(freq, dur, gain, delay) {
 }
 function vibrate(p) { try { if (!_muted && navigator.vibrate) navigator.vibrate(p); } catch { /* */ } }
 
-const WARM = [clickUrl, cardDrawUrl, cardOpenUrl, reactGoodUrl, reactLateUrl];
+const WARM = [clickUrl, cardDrawUrl, cardOpenUrl, reactGoodUrl, reactLateUrl, twKeyUrl, twBellUrl];
 let _warmed = false;
 export function warm() { if (_warmed) return; _warmed = true; if (ac()) WARM.forEach(load); }
 // Call on the first user gesture so every later cue actually plays.
@@ -96,11 +97,7 @@ export const sfx = {
   gameOver() { play(gameOverUrl, 1.0); vibrate([40, 60, 40, 60, 120]); }, // the ezel is decided
   deal() { play(cardDrawUrl, 0.5); },                       // a fresh round is dealt
   newGame() { play(cheersUrl, 0.9); vibrate([15, 30]); },
-  // Artnomad intro signature: a warm rising triad + a soft bell.
-  intro() {
-    tone(523.25, 0.22, 0.09, 0);
-    tone(659.25, 0.22, 0.08, 0.12);
-    tone(783.99, 0.42, 0.10, 0.26);
-    play(twBellUrl, 0.5);
-  },
+  // Artnomad typewriter intro: a key-strike per character + a carriage bell at the end.
+  type() { play(twKeyUrl, 0.9); },
+  ding() { play(twBellUrl, 0.7); vibrate(20); },
 };

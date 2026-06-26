@@ -52,13 +52,14 @@ const STR = {
     collectWord: "verzamel", waitCard: "wacht op kaart",
     vier: "VIER", slamToTable: "sla op tafel", slamNow: "SLA OP", tapped: "getikt",
     safe: "Veilig", youFirst: "jij was eerst",
-    // hand hints
+    // hand hints (lockstep)
     handHasSet: "Je hebt vier gelijk. Sla op tafel!",
-    handPass: "Tik een kaart om hem naar links door te schuiven",
-    handWait: "Wacht op een kaart van rechts",
+    handChoose: "Kies een kaart om naar links door te schuiven",
+    handChosen: (n, total) => `Gekozen. Wachten tot iedereen heeft geschoven (${n}/${total})…`,
+    chosenWait: (n, total) => `Wachten op de rest (${n}/${total})…`,
     yourCards: "Jouw kaarten",
     // opponent
-    fourAlike: "vier gelijk", nCards: (n) => `${n} kaarten`,
+    fourAlike: "vier gelijk", chosePassed: "geschoven", choosing: "kiest…", nCards: (n) => `${n} kaarten`,
     // result
     collectedFour: (name, r) => `${name} verzamelde vier ${r}`,
     youTooLate: "Jij was te laat", xTooLate: (name) => `${name} was te laat`,
@@ -133,10 +134,11 @@ const STR = {
     vier: "FOUR", slamToTable: "slam the table", slamNow: "SLAM", tapped: "tapped",
     safe: "Safe", youFirst: "you were first",
     handHasSet: "You have four of a kind. Slam the table!",
-    handPass: "Tap a card to pass it to the left",
-    handWait: "Wait for a card from the right",
+    handChoose: "Pick a card to pass to the left",
+    handChosen: (n, total) => `Chosen. Waiting for everyone to pass (${n}/${total})…`,
+    chosenWait: (n, total) => `Waiting for the rest (${n}/${total})…`,
     yourCards: "Your cards",
-    fourAlike: "four alike", nCards: (n) => `${n} cards`,
+    fourAlike: "four alike", chosePassed: "passed", choosing: "choosing…", nCards: (n) => `${n} cards`,
     collectedFour: (name, r) => `${name} collected four ${r}`,
     youTooLate: "You were too late", xTooLate: (name) => `${name} was too late`,
     youWereSafe: "You were safe this round.", notInTime: "You didn't tap in time.",
