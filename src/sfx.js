@@ -15,9 +15,10 @@ import mythicKingUrl from "./assets/mythic-king.mp3";
 import twBellUrl from "./assets/tw-bell.mp3";
 import twKeyUrl from "./assets/tw-key.mp3";
 
-let _muted = false;
-export function setMuted(m) { _muted = !!m; }
-export function isMuted() { return _muted; }
+let _vol = 0.9; // 0..1 master sfx volume
+export function setVolume(v) { _vol = Math.max(0, Math.min(1, Number(v))); if (!isFinite(_vol)) _vol = 0; }
+export function getVolume() { return _vol; }
+export function setMuted(m) { _vol = m ? 0 : 0.9; } // back-compat
 
 let _ac = null;
 function ac() {
@@ -40,14 +41,14 @@ function load(url) {
 }
 function play(url, gain) {
   const a = ac();
-  if (!a || _muted) return;
+  if (!a || _vol <= 0) return;
   if (a.state === "suspended") { try { a.resume(); } catch { /* */ } }
   load(url).then((buf) => {
-    if (!buf || _muted) return;
+    if (!buf || _vol <= 0) return;
     const src = a.createBufferSource();
     const g = a.createGain();
     src.buffer = buf;
-    g.gain.value = Math.max(0.0001, gain == null ? 0.9 : gain);
+    g.gain.value = Math.max(0.0001, (gain == null ? 0.9 : gain) * _vol);
     src.connect(g); g.connect(a.destination);
     try { src.start(); } catch { /* */ }
   });
@@ -55,20 +56,20 @@ function play(url, gain) {
 // short synth note (used for the Artnomad intro sting)
 function tone(freq, dur, gain, delay) {
   const a = ac();
-  if (!a || _muted) return;
+  if (!a || _vol <= 0) return;
   const t0 = a.currentTime + (delay || 0);
   const osc = a.createOscillator();
   const g = a.createGain();
   osc.type = "sine";
   osc.frequency.setValueAtTime(freq, t0);
-  const peak = Math.max(0.0002, (gain || 0.1));
+  const peak = Math.max(0.0002, (gain || 0.1) * _vol);
   g.gain.setValueAtTime(0.0001, t0);
   g.gain.exponentialRampToValueAtTime(peak, t0 + 0.02);
   g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
   osc.connect(g); g.connect(a.destination);
   osc.start(t0); osc.stop(t0 + dur + 0.02);
 }
-function vibrate(p) { try { if (!_muted && navigator.vibrate) navigator.vibrate(p); } catch { /* */ } }
+function vibrate(p) { try { if (_vol > 0 && navigator.vibrate) navigator.vibrate(p); } catch { /* */ } }
 
 const WARM = [clickUrl, cardDrawUrl, cardOpenUrl, reactGoodUrl, reactLateUrl, twKeyUrl, twBellUrl];
 let _warmed = false;

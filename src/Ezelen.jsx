@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Hand, Users, Plus, Play, RotateCcw, ChevronRight, ChevronLeft, Settings2, X, Check, WifiOff, Info, LogOut, Camera, Upload, User, Minus, Globe, Volume2, VolumeX, Loader2 } from "lucide-react";
+import { Hand, Users, Plus, Play, RotateCcw, ChevronRight, ChevronLeft, Settings2, X, Check, WifiOff, Info, LogOut, Camera, Upload, User, Minus, Globe, Volume2, VolumeX, Loader2, Share2 } from "lucide-react";
 import { createNet, clientId } from "./net.js";
 import { L, LANGS } from "./i18n.js";
-import { sfx, unlock as sfxUnlock, setMuted as sfxSetMuted } from "./sfx.js";
+import { sfx, unlock as sfxUnlock, setVolume as sfxSetVolume } from "./sfx.js";
 import medallionUrl from "./assets/logo.webp";
 
 /* ------------------------------------------------------------------ */
@@ -37,7 +37,9 @@ for (const _p in _cardGlob) { const _m = _p.match(/\/cards\/([^/]+)\.webp$/); if
 function cardSrc(c) { return c && c.suit ? CARD_FACES[String(c.rank) + (c.suit.letter || "")] : null; }
 
 function cleanName(n) { return String(n || "").replace(/[ -]/g, "").trim().slice(0, 18); }
-const STORE_ROOM = "ezelen_room_v1", STORE_NAME = "ezelen_name_v1", STORE_AVATAR = "ezelen_avatar_v1", STORE_LANG = "ezelen_lang_v1", STORE_MUTE = "ezelen_mute_v1";
+const STORE_ROOM = "ezelen_room_v1", STORE_NAME = "ezelen_name_v1", STORE_AVATAR = "ezelen_avatar_v1", STORE_LANG = "ezelen_lang_v1", STORE_VOL = "ezelen_sfxvol_v1", STORE_ADMIN = "ezelen_admin_v1";
+const ADMIN_CODE = "EZELADMIN"; // unlocks the test-bot + beheer controls on this device
+const APP_VERSION = "1.1.0";
 function loadStore(k) { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch { return null; } }
 function saveStore(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* */ } }
 
@@ -57,13 +59,18 @@ export default function Ezelen() {
   const [adminOpen, setAdminOpen] = useState(false);
   const [uitlegOpen, setUitlegOpen] = useState(false);
   const [simLatency, setSimLatency] = useState(0);
-  const [muted, setMuted] = useState(() => !!loadStore(STORE_MUTE));
+  const [sfxVol, setSfxVol] = useState(() => { const v = loadStore(STORE_VOL); return typeof v === "number" ? v : 0.9; });
+  const [isAdmin, setIsAdmin] = useState(() => !!loadStore(STORE_ADMIN));
 
   const t = L(lang);
+  const muted = sfxVol <= 0;
+  const toggleMute = () => setSfxVol((v) => (v > 0 ? 0 : 0.9));
   const netRef = useRef(null);
   const reduced = useRef(false);
   useEffect(() => { reduced.current = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); }, []);
-  useEffect(() => { sfxSetMuted(muted); saveStore(STORE_MUTE, muted); }, [muted]);
+  useEffect(() => { sfxSetVolume(sfxVol); saveStore(STORE_VOL, sfxVol); }, [sfxVol]);
+  useEffect(() => { saveStore(STORE_ADMIN, isAdmin); }, [isAdmin]);
+  function setLangPersist(c) { setLang(c); saveStore(STORE_LANG, c); }
 
   const ensureNet = useCallback(() => {
     if (netRef.current) return netRef.current;
@@ -126,21 +133,26 @@ export default function Ezelen() {
           <Home t={t} lang={lang} name={name} setName={setName} avatar={avatar} setAvatar={setAvatar}
             joinCode={joinCode} setJoinCode={setJoinCode} error={error}
             onCreate={doCreate} onJoin={() => doJoin()} onResume={(c) => doJoin(c)}
-            onUitleg={() => { sfx.tap(); setUitlegOpen(true); }} onLang={() => setScreen("language")}
-            muted={muted} onMute={() => setMuted((m) => !m)} />
+            onUitleg={() => { sfx.tap(); setUitlegOpen(true); }} onSettings={() => { sfx.tap(); setScreen("settings"); }}
+            muted={muted} onMute={() => { sfx.tap(); toggleMute(); }} />
+        )}
+        {screen === "settings" && (
+          <Settings t={t} lang={lang} setLang={setLangPersist} sfxVol={sfxVol} setSfxVol={(v) => { setSfxVol(v); sfxUnlock(); sfx.tap(); }}
+            isAdmin={isAdmin} setIsAdmin={setIsAdmin}
+            onFaq={() => { sfx.tap(); setUitlegOpen(true); }} onBack={() => { sfx.tap(); setScreen("home"); }} />
         )}
         {screen === "room" && (
-          <Room t={t} st={roomState} status={status} error={error} code={code} myPid={myPid} amHost={amHost}
+          <Room t={t} st={roomState} status={status} error={error} code={code} myPid={myPid} amHost={amHost} isAdmin={isAdmin}
             reduced={reduced.current} act={act} serverNow={serverNow} simLatency={simLatency}
-            muted={muted} onMute={() => setMuted((m) => !m)}
+            muted={muted} onMute={() => { sfx.tap(); toggleMute(); }}
             onLeave={leaveRoom} onAdmin={() => { sfx.tap(); setAdminOpen(true); }} onUitleg={() => { sfx.tap(); setUitlegOpen(true); }}
             onRetry={() => netRef.current && netRef.current.retry && netRef.current.retry()} />
         )}
       </div>
 
-      {screen === "intro" && <Intro t={t} reduced={reduced.current} onDone={() => setScreen("language")} />}
+      {screen === "intro" && <Intro reduced={reduced.current} onDone={() => setScreen("language")} />}
       {uitlegOpen && <Uitleg t={t} onClose={() => { sfx.tap(); setUitlegOpen(false); }} />}
-      {adminOpen && amHost && <AdminSheet t={t} st={roomState} myPid={myPid} act={act} onClose={() => setAdminOpen(false)} simLatency={simLatency} setSimLatency={setSimLatency} />}
+      {adminOpen && amHost && isAdmin && <AdminSheet t={t} st={roomState} myPid={myPid} act={act} onClose={() => setAdminOpen(false)} simLatency={simLatency} setSimLatency={setSimLatency} />}
     </div>
   );
 }
@@ -220,7 +232,7 @@ function LanguagePage({ t, current, onPick }) {
 }
 
 /* ============================ HOME ============================ */
-function Home({ t, lang, name, setName, avatar, setAvatar, joinCode, setJoinCode, error, onCreate, onJoin, onResume, onUitleg, onLang, muted, onMute }) {
+function Home({ t, lang, name, setName, avatar, setAvatar, joinCode, setJoinCode, error, onCreate, onJoin, onResume, onUitleg, onSettings, muted, onMute }) {
   const stored = loadStore(STORE_ROOM);
   const fresh = stored && stored.code && Date.now() - (stored.ts || 0) < 1000 * 60 * 60 * 3;
   return (
@@ -232,7 +244,7 @@ function Home({ t, lang, name, setName, avatar, setAvatar, joinCode, setJoinCode
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button aria-label="mute" onClick={onMute} style={iconBtn()}>{muted ? <VolumeX size={15} /> : <Volume2 size={15} />}</button>
-          <button aria-label="taal" onClick={onLang} style={iconBtn()}><Globe size={15} /></button>
+          <button aria-label={t.settings} onClick={onSettings} style={iconBtn()}><Settings2 size={15} /></button>
         </div>
       </div>
       <p style={{ fontFamily: FR, fontSize: 20, lineHeight: 1.32, color: C.text, margin: "12px 0 6px" }}>
@@ -307,7 +319,7 @@ function Room(props) {
   return <Game {...props} />;
 }
 
-function TopBar({ t, st, status, code, amHost, muted, onMute, onLeave, onAdmin, onUitleg }) {
+function TopBar({ t, st, status, code, amHost, isAdmin, muted, onMute, onLeave, onAdmin, onUitleg }) {
   const dot = status === "open" ? "#7bd88f" : status === "reconnecting" ? C.mand : C.faint;
   const round = st && st.ezelen ? st.ezelen.round : 0;
   return (
@@ -322,7 +334,7 @@ function TopBar({ t, st, status, code, amHost, muted, onMute, onLeave, onAdmin, 
         {code && <span style={{ fontFamily: FR, fontWeight: 700, fontSize: 13.5, color: C.mand, letterSpacing: "0.1em", marginRight: 1 }}>{code}</span>}
         <button aria-label="mute" onClick={onMute} style={iconBtnSm()}>{muted ? <VolumeX size={15} /> : <Volume2 size={15} />}</button>
         <button aria-label="uitleg" onClick={onUitleg} style={iconBtnSm()}><Info size={15} /></button>
-        {amHost && <button aria-label="beheer" onClick={onAdmin} style={iconBtnSm()}><Settings2 size={15} /></button>}
+        {amHost && isAdmin && <button aria-label="beheer" onClick={onAdmin} style={iconBtnSm()}><Settings2 size={15} /></button>}
         <button aria-label="verlaat" onClick={onLeave} style={iconBtnSm()}><LogOut size={15} /></button>
       </div>
     </div>
@@ -330,7 +342,7 @@ function TopBar({ t, st, status, code, amHost, muted, onMute, onLeave, onAdmin, 
 }
 
 /* ============================ LOBBY ============================ */
-function Lobby({ t, st, status, code, myPid, amHost, act, muted, onMute, onLeave, onAdmin, onUitleg }) {
+function Lobby({ t, st, status, code, myPid, amHost, isAdmin, act, muted, onMute, onLeave, onAdmin, onUitleg }) {
   const players = st.players || [];
   const gate = !!st.gate;
   const myReady = !!(st.gateReady && st.gateReady[myPid]);
@@ -342,7 +354,7 @@ function Lobby({ t, st, status, code, myPid, amHost, act, muted, onMute, onLeave
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-      <TopBar t={t} st={st} status={status} code={code} amHost={amHost} muted={muted} onMute={onMute} onLeave={onLeave} onAdmin={onAdmin} onUitleg={onUitleg} />
+      <TopBar t={t} st={st} status={status} code={code} amHost={amHost} isAdmin={isAdmin} muted={muted} onMute={onMute} onLeave={onLeave} onAdmin={onAdmin} onUitleg={onUitleg} />
       <div style={{ flex: 1, padding: "8px 18px 26px", display: "flex", flexDirection: "column" }}>
         <p style={{ fontFamily: FR, fontSize: 22, margin: "10px 0 2px" }}>{gate ? t.readyToPlay : t.waitingRoom}</p>
         <p style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>{gate ? t.gateHint : t.lobbyShare(code)}</p>
@@ -385,7 +397,7 @@ function Lobby({ t, st, status, code, myPid, amHost, act, muted, onMute, onLeave
 
         <div style={{ flex: 1 }} />
 
-        {amHost && !st.started && (
+        {amHost && isAdmin && !st.started && (
           <button onClick={() => click("addbot")} style={{ ...textBtn(), alignSelf: "center", border: `1px dashed ${C.rim}`, padding: "9px 14px", borderRadius: 11, margin: "16px 0 4px", color: C.mand }}>
             <Plus size={14} /> {t.addBot}
           </button>
@@ -412,7 +424,7 @@ function Lobby({ t, st, status, code, myPid, amHost, act, muted, onMute, onLeave
 }
 
 /* ============================ GAME ============================ */
-function Game({ t, st, status, code, myPid, amHost, reduced, act, serverNow, simLatency, muted, onMute, onLeave, onAdmin, onUitleg }) {
+function Game({ t, st, status, code, myPid, amHost, isAdmin, reduced, act, serverNow, simLatency, muted, onMute, onLeave, onAdmin, onUitleg }) {
   const E = st.ezelen;
   const players = st.players || [];
   const me = players.find((p) => p.id === myPid);
@@ -491,8 +503,8 @@ function Game({ t, st, status, code, myPid, amHost, reduced, act, serverNow, sim
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-      <TopBar t={t} st={st} status={status} code={code} amHost={amHost} muted={muted} onMute={onMute} onLeave={onLeave} onAdmin={onAdmin} onUitleg={onUitleg} />
-      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "flex-end", paddingBottom: 14 }}>
+      <TopBar t={t} st={st} status={status} code={code} amHost={amHost} isAdmin={isAdmin} muted={muted} onMute={onMute} onLeave={onLeave} onAdmin={onAdmin} onUitleg={onUitleg} />
+      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "flex-end", paddingBottom: 2 }}>
       <Table aspect={tableAspect}>
         {arcPositions(opponents.length).map((pos, i) => (
           <OpponentSeat key={opponents[i].id} t={t} p={opponents[i]} pos={pos} phase={phase} isDeclarer={opponents[i].id === declarerId} reacted={reactedIds.includes(opponents[i].id)} chose={pendingIds.includes(opponents[i].id)} count={E ? (E.counts[opponents[i].id] || 0) : 0} reduced={reduced} />
@@ -510,21 +522,25 @@ function Game({ t, st, status, code, myPid, amHost, reduced, act, serverNow, sim
       </Table>
       </div>
 
-      <div style={{ textAlign: "center", minHeight: 22, padding: "10px 16px 2px", fontSize: 13 }}>
-        <StatusLine t={t} phase={phase} E={E} bestRank={bestRank} bestCount={bestCount} iAmDeclarer={iAmDeclarer} iReacted={iReacted} myMs={myMs} players={players} youPending={youPending} pendingCount={pendingCount} passTotal={passTotal} />
-      </div>
-
-      <div style={{ padding: "4px 12px calc(16px + env(safe-area-inset-bottom))" }}>
-        <div style={{ textAlign: "center", fontSize: 11, color: C.faint, marginBottom: 8 }}>
-          {phase === "passing" ? (mySet ? t.handHasSet : youPending != null ? t.handChosen(pendingCount, passTotal) : t.handChoose) : t.yourCards}
-        </div>
+      {/* cards sit right against the table */}
+      <div style={{ padding: "2px 12px 0" }}>
         <Fan hand={myHand} collectRank={bestRank} disabled={!canPass} freshId={freshId.current} locked={!!mySet}
           hiddenIds={[youPending, flyer && flyer.card.id].filter((v) => v != null)} onTap={doPass} reduced={reduced} />
       </div>
 
+      {/* status + hint, below the cards */}
+      <div style={{ textAlign: "center", padding: "8px 16px calc(12px + env(safe-area-inset-bottom))" }}>
+        <div style={{ fontSize: 13, minHeight: 18 }}>
+          <StatusLine t={t} phase={phase} E={E} bestRank={bestRank} bestCount={bestCount} iAmDeclarer={iAmDeclarer} iReacted={iReacted} myMs={myMs} players={players} youPending={youPending} pendingCount={pendingCount} passTotal={passTotal} />
+        </div>
+        <div style={{ fontSize: 11, color: C.faint, marginTop: 4 }}>
+          {phase === "passing" ? (mySet ? t.handHasSet : youPending != null ? t.handChosen(pendingCount, passTotal) : t.handChoose) : t.yourCards}
+        </div>
+      </div>
+
       {flyer && <PassFlyer flyer={flyer} />}
       {phase === "result" && E.result && <ResultOverlay t={t} E={E} myPid={myPid} amHost={amHost} act={act} />}
-      {phase === "gameover" && <GameOverOverlay t={t} E={E} myPid={myPid} amHost={amHost} act={act} />}
+      {phase === "gameover" && <GameOverOverlay t={t} E={E} players={players} myPid={myPid} amHost={amHost} act={act} reduced={reduced} />}
     </div>
   );
 }
@@ -737,54 +753,226 @@ function ResultOverlay({ t, E, myPid, amHost, act }) {
   );
 }
 
-function GameOverOverlay({ t, E, myPid, amHost, act }) {
-  const youLost = E.ezelId === myPid;
-  const needsOpdracht = !E.opdracht; // "self" mode: the ezel writes it
-  const [txt, setTxt] = useState("");
-  return (
-    <Overlay>
-      <div style={{ fontFamily: FR, fontSize: 14, color: C.muted, marginBottom: 4 }}>{t.ezelFull}</div>
-      <div style={{ fontFamily: FR, fontWeight: 700, fontSize: 30, color: C.alarm, marginBottom: 14 }}>{youLost ? t.youAreEzel : t.xIsEzel(E.ezelName)}</div>
+/* ---- share card (canvas) ---- */
+function loadImg(src) { return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; }); }
+function roundRectPath(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+function wrapLines(g, text, maxW, font) { g.font = font; const words = String(text).split(/\s+/); const lines = []; let line = ""; for (const w of words) { const tryl = line ? line + " " + w : w; if (g.measureText(tryl).width > maxW && line) { lines.push(line); line = w; } else line = tryl; } if (line) lines.push(line); return lines.slice(0, 4); }
+function truncW(g, text, maxW) { let s = String(text); if (g.measureText(s).width <= maxW) return s; while (s.length > 1 && g.measureText(s + "…").width > maxW) s = s.slice(0, -1); return s + "…"; }
+async function buildEzelCard({ ezelName, avatar, opdracht, t }) {
+  const W = 1080, H = 1350;
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
+  const g = c.getContext("2d");
+  try { await document.fonts.ready; } catch { /* */ }
+  const grad = g.createRadialGradient(W / 2, H * 0.42, 80, W / 2, H * 0.5, H * 0.78);
+  grad.addColorStop(0, "#1a5d46"); grad.addColorStop(0.55, "#0e3528"); grad.addColorStop(1, "#07211b");
+  g.fillStyle = grad; g.fillRect(0, 0, W, H);
+  g.strokeStyle = "rgba(242,145,63,0.55)"; g.lineWidth = 6; roundRectPath(g, 40, 40, W - 80, H - 80, 46); g.stroke();
+  g.strokeStyle = "rgba(242,145,63,0.22)"; g.lineWidth = 2; roundRectPath(g, 58, 58, W - 116, H - 116, 38); g.stroke();
+  const cx = W / 2; g.textAlign = "center";
+  try { const med = await loadImg(medallionUrl); g.drawImage(med, cx - 86, 96, 172, 172); } catch { /* */ }
+  g.fillStyle = "#f2913f"; g.font = "700 46px Fraunces, Georgia, serif"; g.fillText((t.resultEzel || "De ezel").toUpperCase(), cx, 332);
+  const avR = 118, avY = 500; let drew = false;
+  const ringAndClip = async (src) => { try { const im = await loadImg(src); g.save(); g.beginPath(); g.arc(cx, avY, avR, 0, Math.PI * 2); g.clip(); const s = Math.max((2 * avR) / im.naturalWidth, (2 * avR) / im.naturalHeight); g.drawImage(im, cx - im.naturalWidth * s / 2, avY - im.naturalHeight * s / 2, im.naturalWidth * s, im.naturalHeight * s); g.restore(); return true; } catch { return false; } };
+  if (avatar) drew = await ringAndClip(avatar);
+  if (!drew) drew = await ringAndClip(medallionUrl);
+  g.beginPath(); g.arc(cx, avY, avR, 0, Math.PI * 2); g.lineWidth = 7; g.strokeStyle = "#f2913f"; g.stroke();
+  g.fillStyle = "#fff"; g.font = "700 84px Fraunces, Georgia, serif"; g.fillText(truncW(g, ezelName || "?", W - 220), cx, avY + 218);
+  g.fillStyle = "rgba(236,227,211,0.72)"; g.font = "36px Inter, system-ui, sans-serif"; g.fillText(t.isTheEzel || "is de ezel", cx, avY + 268);
+  const pipW = 88, gap = 16, total = 4 * pipW + 3 * gap, px0 = cx - total / 2, pipY = avY + 318;
+  ["E", "Z", "E", "L"].forEach((ch, i) => { const x = px0 + i * (pipW + gap); g.fillStyle = "#f2913f"; roundRectPath(g, x, pipY, pipW, pipW, 14); g.fill(); g.fillStyle = "#241a08"; g.font = "800 52px Fraunces, Georgia, serif"; g.fillText(ch, x + pipW / 2, pipY + pipW / 2 + 19); });
+  if (opdracht) {
+    const boxW = W - 200, boxX = cx - boxW / 2, boxY = pipY + pipW + 56;
+    const lines = wrapLines(g, opdracht, boxW - 80, "34px Inter, system-ui, sans-serif");
+    const boxH = 74 + lines.length * 46;
+    g.fillStyle = "rgba(0,0,0,0.3)"; g.strokeStyle = "rgba(242,145,63,0.4)"; g.lineWidth = 2; roundRectPath(g, boxX, boxY, boxW, boxH, 22); g.fill(); g.stroke();
+    g.fillStyle = "rgba(242,145,63,0.85)"; g.font = "24px Inter, system-ui, sans-serif"; g.fillText((t.opdrachtPrefix || "Opdracht:").toUpperCase(), cx, boxY + 40);
+    g.fillStyle = "#fff"; g.font = "34px Inter, system-ui, sans-serif"; lines.forEach((ln, i) => g.fillText(ln, cx, boxY + 82 + i * 46));
+  }
+  g.fillStyle = "#f2913f"; g.font = "700 36px Fraunces, Georgia, serif"; g.fillText("EZELEN", cx, H - 128);
+  g.fillStyle = "rgba(236,227,211,0.6)"; g.font = "26px Inter, system-ui, sans-serif"; g.fillText("ezelen.artnomad.nl · An Artnomad Game", cx, H - 88);
+  return await new Promise((res) => c.toBlob(res, "image/png"));
+}
+async function shareEzelCard(opts) {
+  const blob = await buildEzelCard(opts); if (!blob) throw new Error("no blob");
+  const file = new File([blob], "ezelen-uitslag.png", { type: "image/png" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text: opts.shareText || "Ezelen" }); return; }
+  const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "ezelen-uitslag.png"; document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
 
-      {E.opdracht ? (
-        <div style={{ padding: "12px 16px", borderRadius: 12, background: "rgba(242,145,63,0.10)", border: `1px solid ${C.rim}`, color: C.text, fontSize: 14, marginBottom: 22 }}>{t.opdrachtPrefix} {E.opdracht}</div>
-      ) : youLost ? (
-        <div style={{ marginBottom: 18, textAlign: "left" }}>
-          <div style={{ fontSize: 12, color: C.faint, marginBottom: 6 }}>{t.writeOwn}</div>
-          <textarea value={txt} onChange={(e) => setTxt(e.target.value.slice(0, 160))} placeholder={t.opdrachtPh} rows={2}
-            style={{ ...inputStyle(), resize: "none", marginBottom: 10 }} />
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => { sfx.tap(); if (txt.trim()) act("ez_opdracht", { text: txt.trim() }); }} disabled={!txt.trim()} style={{ ...primaryBtn(), opacity: txt.trim() ? 1 : 0.45, flex: 1 }}>{t.lockIn}</button>
-            <button onClick={() => { sfx.tap(); act("ez_opdracht", { auto: true }); }} style={{ ...ghostBtn(), flex: 1 }}>{t.letGamePick}</button>
+function GameOverOverlay({ t, E, players, myPid, amHost, act, reduced }) {
+  const youLost = E.ezelId === myPid;
+  const [txt, setTxt] = useState("");
+  const [shareState, setShareState] = useState(null);
+  const ezel = players.find((p) => p.id === E.ezelId) || { name: E.ezelName, avatar: "" };
+  const standings = [...players].sort((a, b) => (b.letters || 0) - (a.letters || 0));
+  async function doShare() {
+    sfx.tap();
+    try { await shareEzelCard({ ezelName: E.ezelName, avatar: ezel.avatar, opdracht: E.opdracht, t, shareText: `${E.ezelName} ${t.isTheEzel}! ezelen.artnomad.nl` }); setShareState("shared"); }
+    catch { setShareState("fail"); }
+  }
+  return (
+    <Overlay align="stretch">
+      <div style={{ maxHeight: "74vh", overflowY: "auto", paddingRight: 2 }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontFamily: FR, fontSize: 13, color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>{t.ezelFull}</div>
+          <div style={{ position: "relative", width: 96, height: 96, margin: "16px auto 0" }}>
+            <div aria-hidden style={{ position: "absolute", inset: -6, borderRadius: "50%", boxShadow: `0 0 38px ${C.glowWarm}`, animation: reduced ? "none" : "ezPulse 3s ease-in-out infinite" }} />
+            {ezel.avatar
+              ? <img src={ezel.avatar} alt="" style={{ width: 96, height: 96, borderRadius: "50%", objectFit: "cover", border: `2px solid ${C.mand}` }} />
+              : <div style={{ width: 96, height: 96, borderRadius: "50%", overflow: "hidden", border: `2px solid ${C.mand}` }}><Medallion size={92} /></div>}
+          </div>
+          <div style={{ fontFamily: FR, fontWeight: 700, fontSize: 28, color: C.alarm, marginTop: 14 }}>{youLost ? t.youAreEzel : t.xIsEzel(E.ezelName)}</div>
+          <div style={{ marginTop: 6 }}><Pips letters={4} isLoser /></div>
+          <div style={{ fontSize: 11.5, color: C.faint, marginTop: 6 }}>{t.resultRounds(E.round || 0)}</div>
+        </div>
+
+        {E.opdracht ? (
+          <div style={{ padding: "12px 16px", borderRadius: 12, background: "rgba(242,145,63,0.10)", border: `1px solid ${C.rim}`, color: C.text, fontSize: 14, margin: "16px 0 4px", textAlign: "center" }}>{t.opdrachtPrefix} {E.opdracht}</div>
+        ) : youLost ? (
+          <div style={{ margin: "16px 0 4px", textAlign: "left" }}>
+            <div style={{ fontSize: 12, color: C.faint, marginBottom: 6 }}>{t.writeOwn}</div>
+            <textarea value={txt} onChange={(e) => setTxt(e.target.value.slice(0, 160))} placeholder={t.opdrachtPh} rows={2} style={{ ...inputStyle(), resize: "none", marginBottom: 10 }} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => { sfx.tap(); if (txt.trim()) act("ez_opdracht", { text: txt.trim() }); }} disabled={!txt.trim()} style={{ ...primaryBtn(), opacity: txt.trim() ? 1 : 0.45, flex: 1 }}>{t.lockIn}</button>
+              <button onClick={() => { sfx.tap(); act("ez_opdracht", { auto: true }); }} style={{ ...ghostBtn(), flex: 1 }}>{t.letGamePick}</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: C.muted, margin: "16px 0 4px", textAlign: "center" }}>{t.ezelWriting}</div>
+        )}
+
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 11, color: C.faint, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>{t.resultStandings}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {standings.map((p) => (
+              <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", borderRadius: 10, background: p.id === E.ezelId ? "rgba(255,61,104,0.1)" : "rgba(0,0,0,0.22)", border: `1px solid ${p.id === E.ezelId ? "rgba(255,61,104,0.3)" : C.rim}` }}>
+                <Avatar p={p} size={28} />
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}{p.id === myPid ? ` (${t.you})` : ""}</span>
+                <Pips letters={p.letters || 0} small />
+              </div>
+            ))}
           </div>
         </div>
-      ) : (
-        <div style={{ fontSize: 13, color: C.muted, marginBottom: 22 }}>{t.ezelWriting}</div>
-      )}
+      </div>
 
+      <button onClick={doShare} style={{ ...primaryBtn(), marginTop: 16 }}><Share2 size={17} /> {shareState === "shared" ? t.shared : shareState === "fail" ? t.shareFail : t.shareResult}</button>
       {amHost ? (
         <>
-          <button onClick={() => { sfx.newGame(); act("newgame"); }} style={primaryBtn()}><RotateCcw size={17} /> {t.playAgain}</button>
-          <button onClick={() => { sfx.tap(); act("tolobby"); }} style={{ ...ghostBtn(), marginTop: 10 }}><Users size={16} /> {t.backToLobby}</button>
+          <button onClick={() => { sfx.newGame(); act("newgame"); }} style={{ ...ghostBtn(), marginTop: 10 }}><RotateCcw size={16} /> {t.playAgain}</button>
+          <button onClick={() => { sfx.tap(); act("tolobby"); }} style={{ ...ghostBtn(), marginTop: 8 }}><Users size={16} /> {t.backToLobby}</button>
         </>
-      ) : <div style={{ fontSize: 12.5, color: C.faint }}>{t.waitHostNewGame}</div>}
+      ) : <div style={{ fontSize: 12.5, color: C.faint, marginTop: 12, textAlign: "center" }}>{t.waitHostNewGame}</div>}
     </Overlay>
+  );
+}
+
+/* ============================ SETTINGS ============================ */
+function SettingsPanel({ title, children }) {
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ fontSize: 11, color: C.faint, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>{title}</div>
+      <div style={{ padding: "12px 14px", borderRadius: 13, background: "rgba(0,0,0,0.22)", border: `1px solid ${C.rim}` }}>{children}</div>
+    </div>
+  );
+}
+function Settings({ t, lang, setLang, sfxVol, setSfxVol, isAdmin, setIsAdmin, onFaq, onBack }) {
+  const [code, setCode] = useState("");
+  const [msg, setMsg] = useState(null);
+  function tryUnlock() {
+    if (code.trim().toUpperCase() === ADMIN_CODE) { setIsAdmin(true); setMsg({ ok: true, text: t.adminUnlocked }); try { sfx.newGame(); } catch { /* */ } setCode(""); }
+    else setMsg({ ok: false, text: t.adminWrong });
+  }
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "12px 18px 40px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+        <button aria-label={t.back} onClick={onBack} style={iconBtn()}><ChevronLeft size={16} /></button>
+        <span style={{ fontFamily: FR, fontWeight: 700, fontSize: 22, color: C.text }}>{t.settings}</span>
+      </div>
+
+      <SettingsPanel title={t.sound}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, color: C.text, fontSize: 14, fontWeight: 600 }}>
+            {sfxVol > 0 ? <Volume2 size={17} color={C.mand} /> : <VolumeX size={17} color={C.faint} />} {t.soundVol}
+          </div>
+          <span style={{ fontSize: 12, color: C.mand }}>{Math.round(sfxVol * 100)}%</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <input type="range" min={0} max={100} value={Math.round(sfxVol * 100)} onChange={(e) => setSfxVol(Number(e.target.value) / 100)} style={{ flex: 1, accentColor: C.mand }} aria-label={t.soundVol} />
+          <button onClick={() => setSfxVol(sfxVol > 0 ? 0 : 0.9)} style={{ ...iconBtn(), color: sfxVol > 0 ? C.mand : C.faint }} aria-label="mute">{sfxVol > 0 ? <Volume2 size={16} /> : <VolumeX size={16} />}</button>
+        </div>
+      </SettingsPanel>
+
+      <SettingsPanel title={t.languageLabel}>
+        <div style={{ display: "flex", gap: 8 }}>
+          {LANGS.map((l) => (
+            <button key={l.code} onClick={() => setLang(l.code)} style={{ flex: 1, padding: "10px", borderRadius: 10, fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: UI,
+              color: lang === l.code ? "#241a08" : C.text, background: lang === l.code ? `linear-gradient(180deg, ${C.mandLite}, ${C.mandDeep})` : "rgba(255,255,255,0.05)", border: `1px solid ${lang === l.code ? C.mand : C.rim}` }}>{l.label}</button>
+          ))}
+        </div>
+      </SettingsPanel>
+
+      <button onClick={onFaq} style={{ ...ghostBtn(), marginTop: 14, justifyContent: "space-between" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><Info size={16} /> {t.helpAndFaq}</span><ChevronRight size={16} />
+      </button>
+
+      <SettingsPanel title={isAdmin ? t.adminActive : t.adminTitle}>
+        {isAdmin ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "#7bd88f", fontSize: 13.5 }}><Check size={16} /> {t.adminActive}</span>
+            <button onClick={() => { setIsAdmin(false); setMsg(null); }} style={{ ...textBtn(), color: C.muted, border: `1px solid ${C.rim}`, padding: "7px 10px", borderRadius: 9 }}>{t.adminLock}</button>
+          </div>
+        ) : (
+          <>
+            <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 10, lineHeight: 1.5 }}>{t.adminBody}</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input value={code} onChange={(e) => { setCode(e.target.value.toUpperCase()); setMsg(null); }} onKeyDown={(e) => e.key === "Enter" && tryUnlock()} placeholder={t.adminPlaceholder} maxLength={16}
+                style={{ ...inputStyle(), marginBottom: 0, fontFamily: "monospace", letterSpacing: "0.1em" }} />
+              <button onClick={tryUnlock} disabled={!code.trim()} style={{ ...primaryBtn(), width: 130, opacity: code.trim() ? 1 : 0.45 }}>{t.adminUnlock}</button>
+            </div>
+            {msg && <div style={{ fontSize: 12, marginTop: 8, color: msg.ok ? "#7bd88f" : C.alarm }}>{msg.text}</div>}
+          </>
+        )}
+      </SettingsPanel>
+
+      <SettingsPanel title={t.aboutTitle}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Medallion size={48} />
+          <div>
+            <div style={{ fontSize: 13, color: C.text, lineHeight: 1.45 }}>{t.aboutBody}</div>
+            <div style={{ fontSize: 11.5, color: C.faint, marginTop: 4 }}>{t.versionLabel} {APP_VERSION} · {t.madeBy}</div>
+          </div>
+        </div>
+      </SettingsPanel>
+      <div style={{ flex: 1 }} />
+    </div>
   );
 }
 
 function Uitleg({ t, onClose }) {
   return (
-    <Overlay onClose={onClose}>
-      <div style={{ fontFamily: FR, fontWeight: 700, fontSize: 22, color: C.mand, marginBottom: 16 }}>{t.howTitle}</div>
-      <div style={{ textAlign: "left", display: "flex", flexDirection: "column", gap: 12 }}>
-        {t.how.map(([title, desc], i) => (
-          <div key={i}>
-            <div style={{ fontWeight: 700, fontSize: 13.5, color: C.text }}>{i + 1}. {title}</div>
-            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5 }}>{desc}</div>
-          </div>
-        ))}
+    <Overlay onClose={onClose} align="stretch">
+      <div style={{ maxHeight: "70vh", overflowY: "auto", textAlign: "left", paddingRight: 2 }}>
+        <div style={{ fontFamily: FR, fontWeight: 700, fontSize: 22, color: C.mand, marginBottom: 14 }}>{t.howTitle}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+          {t.how.map(([title, desc], i) => (
+            <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+              <span style={{ flex: "0 0 auto", width: 22, height: 22, borderRadius: "50%", display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800, fontFamily: FR, color: "#241a08", background: `linear-gradient(180deg, ${C.mandLite}, ${C.mandDeep})` }}>{i + 1}</span>
+              <div><div style={{ fontWeight: 700, fontSize: 13.5, color: C.text }}>{title}</div><div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5 }}>{desc}</div></div>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontFamily: FR, fontWeight: 700, fontSize: 18, color: C.mand, margin: "22px 0 12px" }}>{t.faqTitle}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {t.faq.map((f, i) => (
+            <div key={i}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: C.text }}>{f.q}</div>
+              <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5, marginTop: 2 }}>{f.a}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ borderTop: `1px solid ${C.rim}`, marginTop: 18, paddingTop: 12, textAlign: "center", fontSize: 11.5, color: C.faint }}>{t.madeBy} · ezelen.artnomad.nl</div>
       </div>
-      <button onClick={onClose} style={{ ...primaryBtn(), marginTop: 22 }}>{t.gotIt}</button>
+      <button onClick={onClose} style={{ ...primaryBtn(), marginTop: 16 }}>{t.gotIt}</button>
     </Overlay>
   );
 }
